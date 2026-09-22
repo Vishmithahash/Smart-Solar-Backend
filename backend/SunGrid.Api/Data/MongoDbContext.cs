@@ -36,6 +36,23 @@ namespace SunGrid.Api.Data
         }
 
         /// <summary>
+        /// Sends a ping command to MongoDB to verify server connectivity.
+        /// </summary>
+        public async Task<bool> PingDatabaseAsync()
+        {
+            try
+            {
+                var command = new MongoDB.Bson.BsonDocument("ping", 1);
+                await _database.RunCommandAsync<MongoDB.Bson.BsonDocument>(command);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// MongoDB collection for user management documents.
         /// </summary>
         public IMongoCollection<User> UserDetails { get; }

@@ -108,15 +108,4 @@ namespace SunGrid.Api.DTOs
         public int PageSize { get; set; }
         public int TotalPages => PageSize > 0 ? (int)Math.Ceiling((double)TotalCount / PageSize) : 0;
     }
-
-    /// <summary>
-    /// System health status response payload.
-    /// </summary>
-    public class HealthResponse
-    {
-        public string Status { get; set; } = "Healthy";
-        public string Message { get; set; } = "API is running";
-        public string Application { get; set; } = "SunGrid";
-        public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
-    }
 }

@@ -49,3 +49,4 @@ C:\Users\Vishmitha Hashendra\OneDrive - Sri Lanka Institute of Information Techn
 C:\Users\Vishmitha Hashendra\OneDrive - Sri Lanka Institute of Information Technology\Desktop\Smart Solar\Solar Backend\Smart-Solar-Backend\backend\SunGrid.Api\obj\Debug\net9.0\SunGrid.Api.pdb
 C:\Users\Vishmitha Hashendra\OneDrive - Sri Lanka Institute of Information Technology\Desktop\Smart Solar\Solar Backend\Smart-Solar-Backend\backend\SunGrid.Api\obj\Debug\net9.0\SunGrid.Api.genruntimeconfig.cache
 C:\Users\Vishmitha Hashendra\OneDrive - Sri Lanka Institute of Information Technology\Desktop\Smart Solar\Solar Backend\Smart-Solar-Backend\backend\SunGrid.Api\obj\Debug\net9.0\ref\SunGrid.Api.dll
+C:\Users\Vishmitha Hashendra\OneDrive - Sri Lanka Institute of Information Technology\Desktop\Smart Solar\Solar Backend\Smart-Solar-Backend\backend\SunGrid.Api\bin\Debug\net9.0\appsettings.Production.json

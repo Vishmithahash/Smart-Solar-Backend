@@ -1,0 +1,617 @@
+{
+  "info": {
+    "_postman_id": "c8f1e2a3-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+    "name": "SunGrid Smart Solar Microgrid API",
+    "description": "Complete Postman testing collection covering all 51 REST API endpoints across 7 controllers for SunGrid backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.environment.get('runId')) {",
+          "    const runId = Math.floor(1000 + Math.random() * 9000).toString();",
+          "    pm.environment.set('runId', runId);",
+          "}",
+          "const now = new Date();",
+          "const twoDays = new Date(now.getTime() + (2 * 24 * 60 * 60 * 1000));",
+          "const sixDays = new Date(now.getTime() + (6 * 24 * 60 * 60 * 1000));",
+          "const eightDays = new Date(now.getTime() + (8 * 24 * 60 * 60 * 1000));",
+          "const nearTerm = new Date(now.getTime() + (20 * 60 * 1000));",
+          "pm.environment.set('slotStartTwoDaysUtc', twoDays.toISOString());",
+          "pm.environment.set('slotEndTwoDaysUtc', new Date(twoDays.getTime() + (2 * 3600 * 1000)).toISOString());",
+          "pm.environment.set('slotStartSixDaysUtc', sixDays.toISOString());",
+          "pm.environment.set('slotEndSixDaysUtc', new Date(sixDays.getTime() + (2 * 3600 * 1000)).toISOString());",
+          "pm.environment.set('slotStartEightDaysUtc', eightDays.toISOString());",
+          "pm.environment.set('slotEndEightDaysUtc', new Date(eightDays.getTime() + (2 * 3600 * 1000)).toISOString());",
+          "pm.environment.set('slotStartNearTermUtc', nearTerm.toISOString());",
+          "pm.environment.set('slotEndNearTermUtc', new Date(nearTerm.getTime() + (2 * 3600 * 1000)).toISOString());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health",
+      "item": [
+        {
+          "name": "System Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api", "health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('System is healthy', function () { const jsonData = pm.response.json(); pm.expect(jsonData.status).to.eql('Healthy'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "MongoDB Database Health Ping",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/health/database", "host": ["{{baseUrl}}"], "path": ["api", "health", "database"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Database is healthy', function () { const jsonData = pm.response.json(); pm.expect(jsonData.databaseStatus).to.eql('Healthy'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication",
+      "item": [
+        {
+          "name": "Prosumer Registration",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nic\": \"1998{{runId}}123V\",\n  \"fullName\": \"Test Prosumer {{runId}}\",\n  \"email\": \"prosumer_{{runId}}@sungrid.com\",\n  \"phoneNumber\": \"+9477{{runId}}12\",\n  \"address\": \"No 10, Station Road, Colombo\",\n  \"password\": \"ProsumerPass123!\",\n  \"confirmPassword\": \"ProsumerPass123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/register/prosumer", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register", "prosumer"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('newProsumerId', data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Backoffice",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{backofficeEmail}}\",\n  \"password\": \"{{backofficePassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('backofficeToken', data.token);",
+                  "pm.environment.set('backofficeUserId', data.userId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Grid Operator",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{gridOperatorEmail}}\",\n  \"password\": \"{{gridOperatorPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('gridOperatorToken', data.token);",
+                  "pm.environment.set('gridOperatorId', data.userId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Active Prosumer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{prosumerEmail}}\",\n  \"password\": \"{{prosumerPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('prosumerToken', data.token);",
+                  "pm.environment.set('prosumerId', data.userId);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. User Management",
+      "item": [
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{prosumerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/me", "host": ["{{baseUrl}}"], "path": ["api", "users", "me"] }
+          }
+        },
+        {
+          "name": "Update Current User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{prosumerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Sunil Perera Updated\",\n  \"phoneNumber\": \"+94719876543\",\n  \"address\": \"No 45, Main Street, Colombo 03\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users/me", "host": ["{{baseUrl}}"], "path": ["api", "users", "me"] }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{prosumerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"ProsumerPassword123!\",\n  \"newPassword\": \"ProsumerPassword123!\",\n  \"confirmNewPassword\": \"ProsumerPassword123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users/me/change-password", "host": ["{{baseUrl}}"], "path": ["api", "users", "me", "change-password"] }
+          }
+        },
+        {
+          "name": "Create Staff User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backofficeToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"staff_{{runId}}@sungrid.com\",\n  \"fullName\": \"Staff Operator {{runId}}\",\n  \"role\": \"GridOperator\",\n  \"password\": \"StaffPassword123!\",\n  \"phoneNumber\": \"+9477{{runId}}00\",\n  \"address\": \"Grid Station Office, Kandy\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users/staff", "host": ["{{baseUrl}}"], "path": ["api", "users", "staff"] }
+          }
+        },
+        {
+          "name": "List Users (Backoffice)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{backofficeToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users?pageNumber=1&pageSize=10", "host": ["{{baseUrl}}"], "path": ["api", "users"], "query": [{ "key": "pageNumber", "value": "1" }, { "key": "pageSize", "value": "10" }] }
+          }
+        },
+        {
+          "name": "List Pending Prosumers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{backofficeToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/prosumers/pending", "host": ["{{baseUrl}}"], "path": ["api", "users", "prosumers", "pending"] }
+          }
+        },
+        {
+          "name": "Approve Pending Prosumer",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{backofficeToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/{{newProsumerId}}/approve", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{newProsumerId}}", "approve"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Solar Stations",
+      "item": [
+        {
+          "name": "Create Solar Station",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backofficeToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stationCode\": \"ST-TEST-{{runId}}\",\n  \"name\": \"Test Microgrid Hub {{runId}}\",\n  \"address\": \"Galle Face Green, Colombo 03\",\n  \"latitude\": 6.9271,\n  \"longitude\": 79.8612,\n  \"capacityKwh\": 500.0,\n  \"totalBatteryStorageSlots\": 10\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/stations", "host": ["{{baseUrl}}"], "path": ["api", "stations"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('stationId', data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Active Stations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{prosumerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/stations/active", "host": ["{{baseUrl}}"], "path": ["api", "stations", "active"] }
+          }
+        },
+        {
+          "name": "Get Nearby Stations (Haversine GPS)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{prosumerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/stations/nearby?latitude=6.9271&longitude=79.8612&radiusKm=15", "host": ["{{baseUrl}}"], "path": ["api", "stations", "nearby"], "query": [{ "key": "latitude", "value": "6.9271" }, { "key": "longitude", "value": "79.8612" }, { "key": "radiusKm", "value": "15" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Booking Slots",
+      "item": [
+        {
+          "name": "Create Slot 1 (2 Days Ahead)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backofficeToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTimeUtc\": \"{{slotStartTwoDaysUtc}}\",\n  \"endTimeUtc\": \"{{slotEndTwoDaysUtc}}\",\n  \"totalCapacity\": 5\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/stations/{{stationId}}/slots", "host": ["{{baseUrl}}"], "path": ["api", "stations", "{{stationId}}", "slots"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('bookingSlotId', data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Slot 2 (Near Term 20 Mins Ahead)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backofficeToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTimeUtc\": \"{{slotStartNearTermUtc}}\",\n  \"endTimeUtc\": \"{{slotEndNearTermUtc}}\",\n  \"totalCapacity\": 5\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/stations/{{stationId}}/slots", "host": ["{{baseUrl}}"], "path": ["api", "stations", "{{stationId}}", "slots"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('secondBookingSlotId', data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Slots for Station",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{prosumerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/stations/{{stationId}}/slots", "host": ["{{baseUrl}}"], "path": ["api", "stations", "{{stationId}}", "slots"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Reservations",
+      "item": [
+        {
+          "name": "Create Prosumer Reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{prosumerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingSlotId\": \"{{secondBookingSlotId}}\",\n  \"transferType\": \"EnergyDropOff\",\n  \"energyAmountKwh\": 25.5,\n  \"notes\": \"Postman automated test reservation\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/reservations", "host": ["{{baseUrl}}"], "path": ["api", "reservations"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('reservationId', data.id);",
+                  "pm.environment.set('reservationReference', data.reservationReference);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get My Reservations (Prosumer)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{prosumerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/reservations/me", "host": ["{{baseUrl}}"], "path": ["api", "reservations", "me"] }
+          }
+        },
+        {
+          "name": "Approve Reservation (Grid Operator)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{gridOperatorToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/reservations/{{reservationId}}/approve", "host": ["{{baseUrl}}"], "path": ["api", "reservations", "{{reservationId}}", "approve"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('Approved');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. QR Transactions",
+      "item": [
+        {
+          "name": "Generate QR Payload (Prosumer)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{prosumerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/reservations/{{reservationId}}/qr", "host": ["{{baseUrl}}"], "path": ["api", "reservations", "{{reservationId}}", "qr"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.qrPayload).to.include('SUNGRID:');",
+                  "pm.environment.set('qrPayload', data.qrPayload);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify QR (Grid Operator)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{gridOperatorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"qrPayload\": \"{{qrPayload}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/qr/verify", "host": ["{{baseUrl}}"], "path": ["api", "qr", "verify"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.isValid).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete Energy Transfer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{gridOperatorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"actualEnergyAmountKwh\": 25.5,\n  \"completionNotes\": \"Completed via Postman test\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/qr/complete", "host": ["{{baseUrl}}"], "path": ["api", "qr", "complete"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('Completed');",
+                  "pm.expect(data.alreadyCompleted).to.eql(false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete Energy Transfer (Duplicate / Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{gridOperatorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"actualEnergyAmountKwh\": 25.5\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/qr/complete", "host": ["{{baseUrl}}"], "path": ["api", "qr", "complete"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.alreadyCompleted).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Authorization Negative Tests",
+      "item": [
+        {
+          "name": "Staff Creation by GridOperator -> 403 Forbidden",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{gridOperatorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"forbidden@sungrid.com\",\n  \"fullName\": \"Forbidden Staff\",\n  \"role\": \"GridOperator\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users/staff", "host": ["{{baseUrl}}"], "path": ["api", "users", "staff"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('Status code is 403', function () { pm.response.to.have.status(403); });"] } }
+          ]
+        },
+        {
+          "name": "Station Creation by Prosumer -> 403 Forbidden",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{prosumerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stationCode\": \"ST-FORBIDDEN\",\n  \"name\": \"Forbidden Station\",\n  \"address\": \"Colombo\",\n  \"latitude\": 6.9,\n  \"longitude\": 79.8,\n  \"capacityKwh\": 100,\n  \"totalBatteryStorageSlots\": 5\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/stations", "host": ["{{baseUrl}}"], "path": ["api", "stations"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('Status code is 403', function () { pm.response.to.have.status(403); });"] } }
+          ]
+        },
+        {
+          "name": "Missing JWT Authorization Header -> 401 Unauthorized",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/me", "host": ["{{baseUrl}}"], "path": ["api", "users", "me"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('Status code is 401', function () { pm.response.to.have.status(401); });"] } }
+          ]
+        },
+        {
+          "name": "7-Day Rule Violation Booking -> 400 Bad Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backofficeToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTimeUtc\": \"{{slotStartEightDaysUtc}}\",\n  \"endTimeUtc\": \"{{slotEndEightDaysUtc}}\",\n  \"totalCapacity\": 5\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/stations/{{stationId}}/slots", "host": ["{{baseUrl}}"], "path": ["api", "stations", "{{stationId}}", "slots"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"] } }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,6 @@
 *.userosscache
 *.sln.docstates
 *.suo
-*.user
 [Bb]in/
 [Ob]j/
 .vs/
@@ -12,8 +11,16 @@
 
 ## Secrets & local environment settings
 appsettings.Local.json
+*.local.json
 *.secrets.json
 secrets.json
+.env
+
+## Publish & artifact outputs
+artifacts/
+publish/
+[Ll]ogs/
+*.log
 
 ## OS files
 Thumbs.db

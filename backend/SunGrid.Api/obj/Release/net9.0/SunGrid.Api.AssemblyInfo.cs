@@ -12,7 +12,7 @@ using System.Reflection;
 
 [assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("94a5851a-98ad-403e-9be7-671d2c897e5d")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("SunGrid.Api")]
-[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
 [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+00791e8ecaf538cc9852fcde9dfbf3360cbaa1a0")]
 [assembly: System.Reflection.AssemblyProductAttribute("SunGrid.Api")]
