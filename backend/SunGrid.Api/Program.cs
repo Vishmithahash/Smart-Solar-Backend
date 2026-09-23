@@ -35,9 +35,10 @@ builder.Services.AddScoped<DataSeeder>();
 
 // Configure JWT Authentication
 var jwtSettingsSection = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettingsSection["SecretKey"] ?? "SunGrid_Default_Development_Secret_Key_2026_Minimum_32_Bytes!";
-var issuer = jwtSettingsSection["Issuer"] ?? "SunGridApi";
-var audience = jwtSettingsSection["Audience"] ?? "SunGridClients";
+var configKey = jwtSettingsSection["SecretKey"];
+var secretKey = string.IsNullOrWhiteSpace(configKey) ? "SunGrid_Default_Development_Secret_Key_2026_Minimum_32_Bytes!" : configKey;
+var issuer = string.IsNullOrWhiteSpace(jwtSettingsSection["Issuer"]) ? "SunGridApi" : jwtSettingsSection["Issuer"];
+var audience = string.IsNullOrWhiteSpace(jwtSettingsSection["Audience"]) ? "SunGridClients" : jwtSettingsSection["Audience"];
 
 builder.Services.AddAuthentication(options =>
 {

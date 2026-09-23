@@ -70,6 +70,8 @@ namespace SunGrid.Api.Data
             }
             else
             {
+                var update = Builders<User>.Update.Set(u => u.PasswordHash, BCrypt.Net.BCrypt.HashPassword(adminPassword));
+                await _context.UserDetails.UpdateOneAsync(u => u.Id == existingAdmin.Id, update);
                 adminUser = existingAdmin;
             }
 

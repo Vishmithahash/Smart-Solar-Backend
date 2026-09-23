@@ -23,7 +23,13 @@ namespace SunGrid.Api.Data
         public MongoDbContext(IOptions<MongoDbSettings> settings)
         {
             var mongoSettings = settings.Value;
-            var client = new MongoClient(mongoSettings.ConnectionString);
+            var connectionString = Environment.GetEnvironmentVariable("MONGODB_CONNECTION_STRING")
+                ?? Environment.GetEnvironmentVariable("MONGODB_URI")
+                ?? (string.IsNullOrWhiteSpace(mongoSettings.ConnectionString) ? "mongodb://localhost:27017" : mongoSettings.ConnectionString);
+            
+            var clientSettings = MongoClientSettings.FromConnectionString(connectionString);
+            clientSettings.ServerSelectionTimeout = TimeSpan.FromSeconds(3);
+            var client = new MongoClient(clientSettings);
             _database = client.GetDatabase(mongoSettings.DatabaseName);
 
             UserDetails = _database.GetCollection<User>(mongoSettings.UserCollectionName);
@@ -31,8 +37,8 @@ namespace SunGrid.Api.Data
             EnergyBookingSlots = _database.GetCollection<EnergyBookingSlot>(mongoSettings.SlotCollectionName);
             EnergyReservations = _database.GetCollection<EnergyReservation>(mongoSettings.ReservationCollectionName);
 
-            // Ensure MongoDB indexes are created asynchronously on context initialization
-            CreateIndexes();
+            // Ensure MongoDB indexes are created asynchronously in background without blocking server startup
+            Task.Run(CreateIndexes);
         }
 
         /// <summary>

@@ -171,13 +171,19 @@ namespace SunGrid.Api.Services
         /// </summary>
         public async Task<StationResponse> GetStationByIdAsync(string id, string userRole)
         {
-            ValidateObjectId(id);
-
-            var station = await _context.SolarStationInfo.Find(s => s.Id == id).FirstOrDefaultAsync();
+            SolarStation? station;
+            if (ObjectId.TryParse(id, out _))
+            {
+                station = await _context.SolarStationInfo.Find(s => s.Id == id).FirstOrDefaultAsync();
+            }
+            else
+            {
+                station = await _context.SolarStationInfo.Find(s => s.StationCode == id).FirstOrDefaultAsync();
+            }
 
             if (station == null)
             {
-                throw new KeyNotFoundException($"Solar station with ID '{id}' was not found.");
+                throw new KeyNotFoundException($"Solar station with ID or Code '{id}' was not found.");
             }
 
             // Restrict non-Backoffice users from viewing Inactive stations

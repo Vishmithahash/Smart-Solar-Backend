@@ -94,16 +94,28 @@ namespace SunGrid.Api.Services
         /// </summary>
         public async Task<List<BookingSlotResponse>> GetSlotsForStationAsync(string stationId, DateTime? fromUtc, DateTime? toUtc, string? status, bool includePast, string userRole)
         {
-            ValidateObjectId(stationId);
+            SolarStation? station;
+            string resolvedStationId = stationId;
+            if (ObjectId.TryParse(stationId, out _))
+            {
+                station = await _context.SolarStationInfo.Find(s => s.Id == stationId).FirstOrDefaultAsync();
+            }
+            else
+            {
+                station = await _context.SolarStationInfo.Find(s => s.StationCode == stationId).FirstOrDefaultAsync();
+                if (station != null)
+                {
+                    resolvedStationId = station.Id;
+                }
+            }
 
-            var station = await _context.SolarStationInfo.Find(s => s.Id == stationId).FirstOrDefaultAsync();
             if (station == null)
             {
-                throw new KeyNotFoundException($"Solar station with ID '{stationId}' was not found.");
+                return new List<BookingSlotResponse>();
             }
 
             var builder = Builders<EnergyBookingSlot>.Filter;
-            var filter = builder.Eq(s => s.StationId, stationId);
+            var filter = builder.Eq(s => s.StationId, resolvedStationId);
 
             // Role-based visibility enforcement
             if (userRole.Equals(UserRole.Prosumer.ToString(), StringComparison.OrdinalIgnoreCase))
