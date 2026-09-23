@@ -37,8 +37,26 @@ namespace SunGrid.Api.Data
             EnergyBookingSlots = _database.GetCollection<EnergyBookingSlot>(mongoSettings.SlotCollectionName);
             EnergyReservations = _database.GetCollection<EnergyReservation>(mongoSettings.ReservationCollectionName);
 
-            // Ensure MongoDB indexes are created asynchronously in background without blocking server startup
-            Task.Run(CreateIndexes);
+
+            // Ensure MongoDB indexes are created asynchronously on context initialization without blocking constructor
+            Task.Run(async () => await CreateIndexesAsync());
+        }
+
+        /// <summary>
+        /// Sends a ping command to MongoDB to verify server connectivity.
+        /// </summary>
+        public async Task<bool> PingDatabaseAsync()
+        {
+            try
+            {
+                var command = new MongoDB.Bson.BsonDocument("ping", 1);
+                await _database.RunCommandAsync<MongoDB.Bson.BsonDocument>(command);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -62,16 +80,16 @@ namespace SunGrid.Api.Data
         public IMongoCollection<EnergyReservation> EnergyReservations { get; }
 
         /// <summary>
-        /// Creates necessary database indexes for UserDetails, SolarStationInfo, EnergyBookingSlots, and EnergyReservations collections.
+        /// Creates necessary database indexes asynchronously for UserDetails, SolarStationInfo, EnergyBookingSlots, and EnergyReservations collections.
         /// </summary>
-        private void CreateIndexes()
+        private async Task CreateIndexesAsync()
         {
             try
             {
                 // UserDetails: Unique index for normalized Email
                 var emailIndexKeys = Builders<User>.IndexKeys.Ascending(u => u.Email);
                 var emailIndexOptions = new CreateIndexOptions { Unique = true, Name = "UX_User_Email" };
-                UserDetails.Indexes.CreateOne(new CreateIndexModel<User>(emailIndexKeys, emailIndexOptions));
+                await UserDetails.Indexes.CreateOneAsync(new CreateIndexModel<User>(emailIndexKeys, emailIndexOptions));
 
                 // UserDetails: Sparse unique index for NIC (indexes only non-null NIC values)
                 var nicIndexKeys = Builders<User>.IndexKeys.Ascending(u => u.Nic);
@@ -81,47 +99,47 @@ namespace SunGrid.Api.Data
                     Sparse = true,
                     Name = "UX_User_Nic_Sparse"
                 };
-                UserDetails.Indexes.CreateOne(new CreateIndexModel<User>(nicIndexKeys, nicIndexOptions));
+                await UserDetails.Indexes.CreateOneAsync(new CreateIndexModel<User>(nicIndexKeys, nicIndexOptions));
 
                 // SolarStationInfo: Unique index for StationCode
                 var stationCodeKeys = Builders<SolarStation>.IndexKeys.Ascending(s => s.StationCode);
                 var stationCodeOptions = new CreateIndexOptions { Unique = true, Name = "UX_Station_Code" };
-                SolarStationInfo.Indexes.CreateOne(new CreateIndexModel<SolarStation>(stationCodeKeys, stationCodeOptions));
+                await SolarStationInfo.Indexes.CreateOneAsync(new CreateIndexModel<SolarStation>(stationCodeKeys, stationCodeOptions));
 
                 // EnergyBookingSlots: Index for StationId
                 var slotStationKeys = Builders<EnergyBookingSlot>.IndexKeys.Ascending(s => s.StationId);
-                EnergyBookingSlots.Indexes.CreateOne(new CreateIndexModel<EnergyBookingSlot>(slotStationKeys, new CreateIndexOptions { Name = "IX_Slot_StationId" }));
+                await EnergyBookingSlots.Indexes.CreateOneAsync(new CreateIndexModel<EnergyBookingSlot>(slotStationKeys, new CreateIndexOptions { Name = "IX_Slot_StationId" }));
 
                 // EnergyBookingSlots: Index for StartTimeUtc
                 var slotStartKeys = Builders<EnergyBookingSlot>.IndexKeys.Ascending(s => s.StartTimeUtc);
-                EnergyBookingSlots.Indexes.CreateOne(new CreateIndexModel<EnergyBookingSlot>(slotStartKeys, new CreateIndexOptions { Name = "IX_Slot_StartTimeUtc" }));
+                await EnergyBookingSlots.Indexes.CreateOneAsync(new CreateIndexModel<EnergyBookingSlot>(slotStartKeys, new CreateIndexOptions { Name = "IX_Slot_StartTimeUtc" }));
 
                 // EnergyBookingSlots: Compound index for StationId and StartTimeUtc
                 var compoundKeys = Builders<EnergyBookingSlot>.IndexKeys
                     .Ascending(s => s.StationId)
                     .Ascending(s => s.StartTimeUtc);
-                EnergyBookingSlots.Indexes.CreateOne(new CreateIndexModel<EnergyBookingSlot>(compoundKeys, new CreateIndexOptions { Name = "IX_Slot_StationId_StartTimeUtc" }));
+                await EnergyBookingSlots.Indexes.CreateOneAsync(new CreateIndexModel<EnergyBookingSlot>(compoundKeys, new CreateIndexOptions { Name = "IX_Slot_StationId_StartTimeUtc" }));
 
                 // EnergyReservations: Unique index for ReservationReference
                 var resRefKeys = Builders<EnergyReservation>.IndexKeys.Ascending(r => r.ReservationReference);
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(resRefKeys, new CreateIndexOptions { Unique = true, Name = "UX_Reservation_Reference" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(resRefKeys, new CreateIndexOptions { Unique = true, Name = "UX_Reservation_Reference" }));
 
                 // EnergyReservations: Single-field indexes
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.ProsumerId), new CreateIndexOptions { Name = "IX_Reservation_ProsumerId" }));
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.BookingSlotId), new CreateIndexOptions { Name = "IX_Reservation_BookingSlotId" }));
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.StationId), new CreateIndexOptions { Name = "IX_Reservation_StationId" }));
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.Status), new CreateIndexOptions { Name = "IX_Reservation_Status" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.ProsumerId), new CreateIndexOptions { Name = "IX_Reservation_ProsumerId" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.BookingSlotId), new CreateIndexOptions { Name = "IX_Reservation_BookingSlotId" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.StationId), new CreateIndexOptions { Name = "IX_Reservation_StationId" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(r => r.Status), new CreateIndexOptions { Name = "IX_Reservation_Status" }));
 
                 // EnergyReservations: Compound indexes
                 var prosumerCreatedKeys = Builders<EnergyReservation>.IndexKeys.Ascending(r => r.ProsumerId).Descending(r => r.CreatedAtUtc);
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(prosumerCreatedKeys, new CreateIndexOptions { Name = "IX_Reservation_ProsumerId_CreatedAtUtc" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(prosumerCreatedKeys, new CreateIndexOptions { Name = "IX_Reservation_ProsumerId_CreatedAtUtc" }));
 
                 var statusCreatedKeys = Builders<EnergyReservation>.IndexKeys.Ascending(r => r.Status).Descending(r => r.CreatedAtUtc);
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(statusCreatedKeys, new CreateIndexOptions { Name = "IX_Reservation_Status_CreatedAtUtc" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(statusCreatedKeys, new CreateIndexOptions { Name = "IX_Reservation_Status_CreatedAtUtc" }));
 
                 // EnergyReservations: Sparse unique index for QrTokenHash
                 var qrHashKeys = Builders<EnergyReservation>.IndexKeys.Ascending(r => r.QrTokenHash);
-                EnergyReservations.Indexes.CreateOne(new CreateIndexModel<EnergyReservation>(qrHashKeys, new CreateIndexOptions { Unique = true, Sparse = true, Name = "UX_Reservation_QrTokenHash_Sparse" }));
+                await EnergyReservations.Indexes.CreateOneAsync(new CreateIndexModel<EnergyReservation>(qrHashKeys, new CreateIndexOptions { Unique = true, Sparse = true, Name = "UX_Reservation_QrTokenHash_Sparse" }));
             }
             catch
             {

@@ -1,9 +1,11 @@
 // File name: Program.cs
 // Project name: SunGrid
-// Purpose of the file: Application entry point configuring dependency injection, middleware pipeline, JWT auth, Swagger, and database seeding.
+// Purpose of the file: Application entry point configuring dependency injection, startup validation, middleware pipeline, JWT auth, Swagger, and database seeding.
 // Author placeholder: SunGrid Development Team
 
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -13,6 +15,9 @@ using SunGrid.Api.Services;
 using SunGrid.Api.Settings;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Perform startup configuration validation
+ValidateConfiguration(builder.Configuration, builder.Environment);
 
 // Configure Settings Sections
 builder.Services.Configure<MongoDbSettings>(builder.Configuration.GetSection("MongoDbSettings"));
@@ -64,21 +69,44 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// Configure Controllers
-builder.Services.AddControllers();
+// Configure Controllers with camelCase and String Enum Serialization
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 // Configure CORS Policy
-var corsOrigins = builder.Configuration.GetSection("CorsSettings:AllowedOrigins").Get<string[]>()
-    ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+var corsOrigins = builder.Configuration.GetSection("CorsSettings:AllowedOrigins").Get<string[]>();
+if (corsOrigins == null || corsOrigins.Length == 0)
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        corsOrigins = new[] { "http://localhost:3000", "http://localhost:5173" };
+    }
+    else
+    {
+        corsOrigins = Array.Empty<string>();
+    }
+}
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("SunGridCorsPolicy", policy =>
     {
-        policy.WithOrigins(corsOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+        if (corsOrigins.Length > 0)
+        {
+            policy.WithOrigins(corsOrigins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
+        else
+        {
+            policy.AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
     });
 });
 
@@ -90,10 +118,9 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "SunGrid API - Smart Solar Microgrid Trading System",
         Version = "v1",
-        Description = "RESTful Web API for SunGrid microgrid user management and authentication."
+        Description = "RESTful Web API for SunGrid microgrid management and authentication."
     });
 
-    // Add JWT Bearer Security Definition to Swagger UI
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Enter JWT Bearer token format: Bearer {your_token}",
@@ -122,7 +149,7 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Seed initial Backoffice admin on application startup
+// Seed initial Backoffice admin if enabled in configuration
 using (var scope = app.Services.CreateScope())
 {
     try
@@ -140,13 +167,17 @@ using (var scope = app.Services.CreateScope())
 // Global Exception Handler Middleware
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-// Enable Swagger UI in Development and Production
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// Enable Swagger UI in Development OR when explicitly enabled via Swagger:Enabled=true
+var enableSwagger = app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled", false);
+if (enableSwagger)
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SunGrid API v1");
-    c.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SunGrid API v1");
+        c.RoutePrefix = "swagger";
+    });
+}
 
 app.UseCors("SunGridCorsPolicy");
 
@@ -156,3 +187,51 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+/// <summary>
+/// Startup helper function validating required configuration settings without exposing secrets.
+/// </summary>
+static void ValidateConfiguration(IConfiguration config, IHostEnvironment env)
+{
+    var mongoConn = config["MongoDbSettings:ConnectionString"];
+    var mongoDb = config["MongoDbSettings:DatabaseName"];
+    var secretKey = config["JwtSettings:SecretKey"];
+    var issuer = config["JwtSettings:Issuer"];
+    var audience = config["JwtSettings:Audience"];
+
+    if (string.IsNullOrWhiteSpace(mongoConn))
+    {
+        throw new InvalidOperationException("Startup Error: 'MongoDbSettings:ConnectionString' is missing or empty.");
+    }
+
+    if (string.IsNullOrWhiteSpace(mongoDb))
+    {
+        throw new InvalidOperationException("Startup Error: 'MongoDbSettings:DatabaseName' is missing or empty.");
+    }
+
+    if (string.IsNullOrWhiteSpace(secretKey) || secretKey.Length < 32)
+    {
+        throw new InvalidOperationException("Startup Error: 'JwtSettings:SecretKey' must be at least 32 characters long.");
+    }
+
+    if (string.IsNullOrWhiteSpace(issuer))
+    {
+        throw new InvalidOperationException("Startup Error: 'JwtSettings:Issuer' is missing or empty.");
+    }
+
+    if (string.IsNullOrWhiteSpace(audience))
+    {
+        throw new InvalidOperationException("Startup Error: 'JwtSettings:Audience' is missing or empty.");
+    }
+
+    var seedEnabled = config.GetValue<bool>("SeedAdminSettings:Enabled", false);
+    if (seedEnabled)
+    {
+        var seedEmail = config["SeedAdminSettings:Email"];
+        var seedPass = config["SeedAdminSettings:Password"];
+        if (string.IsNullOrWhiteSpace(seedEmail) || string.IsNullOrWhiteSpace(seedPass))
+        {
+            throw new InvalidOperationException("Startup Error: Seed admin is enabled but 'SeedAdminSettings:Email' or 'Password' is missing.");
+        }
+    }
+}

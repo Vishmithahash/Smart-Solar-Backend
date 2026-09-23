@@ -253,16 +253,92 @@ The backend **does not generate QR images** (PNG, SVG, Base64 images).
 
 ---
 
-## Viva Defense Quick Explanations
+## Requirements Audit Coverage Table
 
-1. **Why does the QR contain only a random token?**
-   - Placing user details, reservation IDs, or JWTs inside a QR code creates privacy leaks and tampering risks. An opaque random token (`SUNGRID:<32-random-bytes>`) acts as a single-use secure ticket without exposing PII.
-2. **Why does the database store only the token hash?**
-   - Storing raw tokens in MongoDB creates a risk if the database is accessed. By storing only the SHA-256 hash (`QrTokenHash`), even if the database is read, the raw QR payload cannot be derived or recreated.
-3. **How does QR verification work?**
-   - Grid Operator sends the scanned text. The API extracts the token, computes its SHA-256 hash, queries MongoDB for the reservation, and verifies that the token is unrevoked, unexpired, reservation is Approved, and slot is inside the 30-minute completion window.
-4. **How is duplicate completion prevented?**
-   - Completion uses an **atomic MongoDB conditional update** (`FindOneAndUpdateAsync`) checking `Status == Approved` and `QrUsedAtUtc == null`. The first request atomically sets `Status = Completed` and `QrUsedAtUtc = nowUtc`. Subsequent requests fail the filter, hit the idempotency check, and safely return `AlreadyCompleted = true`.
-5. **Why is slot capacity not released after completion?**
-   - Slot capacity was reserved when the Pending reservation was created. Completion confirms that the reserved solar energy drop-off or charging transaction physically took place. Releasing capacity upon completion would incorrectly allow extra unreserved bookings into the slot.
+| Category | Requirement Feature | Endpoint | Allowed Roles | Status |
+| :--- | :--- | :--- | :--- | :---: |
+| **User** | Staff User Registration | `POST /api/users/staff` | `Backoffice` | ✅ Complete |
+| **User** | Prosumer Self-Registration | `POST /api/auth/register/prosumer` | Public | ✅ Complete |
+| **User** | Password Login & JWT Issuance | `POST /api/auth/login` | Public (`Active` Users) | ✅ Complete |
+| **User** | Password Changing | `PATCH /api/users/me/change-password` | All Authenticated | ✅ Complete |
+| **User** | Pending Prosumer Review & Approval | `PATCH /api/users/{id}/approve` | `Backoffice` | ✅ Complete |
+| **User** | Account Deactivation & Reactivation | `DELETE /api/users/{id}`, `PATCH /api/users/{id}/reactivate` | `Backoffice` | ✅ Complete |
+| **Station** | Microgrid Station CRUD & Schedule | `POST`, `GET`, `PUT`, `DELETE /api/stations` | `Backoffice`, `GridOperator` | ✅ Complete |
+| **Station** | Station Deactivation Protection | `DELETE /api/stations/{id}` | `Backoffice` | ✅ Complete (Blocked if active reservations exist) |
+| **Station** | Haversine GPS Nearby Search | `GET /api/stations/nearby` | Public / All Authenticated | ✅ Complete |
+| **Slot** | Energy Booking Slot Management | `POST`, `GET`, `PUT`, `DELETE /api/booking-slots` | `Backoffice`, `GridOperator` | ✅ Complete |
+| **Slot** | Slot Overlap & Capacity Protection | `POST /api/stations/{id}/slots` | `Backoffice` | ✅ Complete |
+| **Reservation** | Prosumer Self-Service Booking | `POST /api/reservations` | `Prosumer` | ✅ Complete |
+| **Reservation** | On-Behalf Reservation Creation | `POST /api/reservations/for-prosumer/{id}` | `Backoffice`, `GridOperator` | ✅ Complete |
+| **Reservation** | 7-Day & 12-Hour Rules | `POST`, `PUT`, `PATCH /api/reservations` | `Prosumer`, Staff | ✅ Complete |
+| **Reservation** | Approval, Rejection & Cancellation | `PATCH /api/reservations/{id}/approve`, `reject`, `cancel` | Staff, Owner Prosumer | ✅ Complete |
+| **Reservation** | Dashboard Counts & Filters | `GET /api/reservations/me/dashboard`, `/dashboard` | `Prosumer`, Staff | ✅ Complete |
+| **QR & Transfer** | Secure QR Payload Generation | `POST /api/reservations/{id}/qr` | `Prosumer` (Approved Only) | ✅ Complete |
+| **QR & Transfer** | QR Verification & Expiry Check | `POST /api/qr/verify` | `GridOperator` | ✅ Complete |
+| **QR & Transfer** | Idempotent Transfer Completion | `POST /api/qr/complete` | `GridOperator` | ✅ Complete |
+| **Health** | System & Database Health Check | `GET /api/health`, `GET /api/health/database` | Public | ✅ Complete |
+
+---
+
+## Production Environment Variables
+
+| Variable Name | Description | Example / Required |
+| :--- | :--- | :--- |
+| `ASPNETCORE_ENVIRONMENT` | Host environment setting | `Production` |
+| `MongoDbSettings__ConnectionString` | MongoDB Atlas SRV URI | `mongodb+srv://user:pass@cluster.mongodb.net/sungrid` |
+| `MongoDbSettings__DatabaseName` | Target database name | `sungrid` |
+| `JwtSettings__SecretKey` | Cryptographic JWT signing key | `<secure-32+character-key>` |
+| `JwtSettings__Issuer` | Valid JWT Issuer claim | `SunGridApi` |
+| `JwtSettings__Audience` | Valid JWT Audience claim | `SunGridClients` |
+| `CorsSettings__AllowedOrigins__0` | Allowed React app URL | `https://sungrid.yourdomain.com` |
+| `SeedAdminSettings__Enabled` | Enable startup admin seeder | `false` (Production recommendation) |
+| `Swagger__Enabled` | Enable Swagger in Production | `false` (Set `true` temporarily for demo) |
+
+---
+
+## Final API Verification Checklist
+
+- [x] Authentication & BCrypt hashing operational
+- [x] JWT role-based access control enforced across all endpoints
+- [x] MongoDB Atlas connection verified (`smartsolar.4bt2u1t.mongodb.net`)
+- [x] User management CRUD & status workflows active
+- [x] Station management & Haversine GPS search functional
+- [x] Booking slot overlap prevention & capacity management active
+- [x] 7-Day reservation rule enforced
+- [x] 12-Hour update & cancellation rule enforced
+- [x] Secure QR token generation & SHA-256 hash storage operational
+- [x] 30-Minute QR completion window enforced
+- [x] Idempotent energy transfer completion active (`FindOneAndUpdateAsync`)
+- [x] Real-time Prosumer & Operations dashboards operational
+- [x] Configurable CORS policy implemented
+- [x] Zero hardcoded secrets in tracked repository files
+- [x] Development build (`dotnet build`) succeeds with 0 warnings & 0 errors
+- [x] Release build (`dotnet build -c Release`) succeeds with 0 warnings & 0 errors
+- [x] Release publish (`dotnet publish -c Release`) succeeds with valid `web.config`
+- [x] Public health endpoints (`/api/health`, `/api/health/database`) operational
+
+---
+
+## Manual Final Smoke Test Sequence (20 Steps)
+
+1. Call `GET /api/health` $\rightarrow$ 200 OK.
+2. Call `GET /api/health/database` $\rightarrow$ 200 OK (MongoDB Ping success).
+3. Log in as Backoffice (`POST /api/auth/login`).
+4. Confirm Backoffice can query users (`GET /api/users`) and stations (`GET /api/stations`).
+5. Attempt calling `POST /api/users/staff` as GridOperator. Confirm 403 Forbidden.
+6. Log in as Prosumer (`prosumer1@sungrid.com`).
+7. Search active stations (`GET /api/stations/active`) and available slots (`GET /api/stations/{id}/slots`).
+8. Create a reservation for a slot 2 days in future. Status becomes `Pending`.
+9. Verify 7-day rule: Attempt booking a slot 8 days in future. Confirm 400 Bad Request.
+10. Log in as GridOperator (`operator@sungrid.com`).
+11. Approve the pending reservation (`PATCH /api/reservations/{id}/approve`).
+12. Log in as owner Prosumer and generate QR (`POST /api/reservations/{id}/qr`).
+13. Verify payload format starts with `SUNGRID:` and contains no personal data.
+14. Log in as GridOperator and verify QR (`POST /api/qr/verify`).
+15. Complete energy transfer (`POST /api/qr/complete`). Status becomes `Completed`.
+16. Resubmit the exact same QR payload to completion endpoint.
+17. Confirm HTTP 200 OK response with `alreadyCompleted: true` and unchanged timestamp.
+18. Call `GET /api/reservations/me/history` as Prosumer. Confirm completed reservation is listed.
+19. Call `GET /api/reservations/dashboard` as Staff. Confirm `completedReservationsCount` incremented.
+20. Confirm an unauthenticated request to `/api/users/me` returns 401 Unauthorized.
 

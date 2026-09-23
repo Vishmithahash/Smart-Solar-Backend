@@ -23,14 +23,16 @@ namespace SunGrid.Api.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<GlobalExceptionMiddleware> _logger;
+        private readonly IHostEnvironment _environment;
 
         /// <summary>
-        /// Initializes the exception middleware with next delegate and logger.
+        /// Initializes the exception middleware with next delegate, logger, and host environment.
         /// </summary>
-        public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
+        public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger, IHostEnvironment environment)
         {
             _next = next;
             _logger = logger;
+            _environment = environment;
         }
 
         /// <summary>
@@ -45,14 +47,14 @@ namespace SunGrid.Api.Middleware
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An unhandled exception occurred during request processing.");
-                await HandleExceptionAsync(context, ex);
+                await HandleExceptionAsync(context, ex, _environment.IsDevelopment());
             }
         }
 
         /// <summary>
-        /// Maps exceptions to appropriate HTTP status codes and writes JSON error response.
+        /// Maps exceptions to appropriate HTTP status codes and writes standardized JSON error response.
         /// </summary>
-        private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+        private static Task HandleExceptionAsync(HttpContext context, Exception exception, bool isDevelopment)
         {
             context.Response.ContentType = "application/json";
 
@@ -63,15 +65,26 @@ namespace SunGrid.Api.Middleware
                 KeyNotFoundException => HttpStatusCode.NotFound,               // 404 Not Found
                 ArgumentException => HttpStatusCode.BadRequest,               // 400 Bad Request
                 InvalidOperationException => HttpStatusCode.BadRequest,       // 400 Bad Request
+                BadHttpRequestException => HttpStatusCode.BadRequest,         // 400 Bad Request
                 _ => HttpStatusCode.InternalServerError                       // 500 Internal Server Error
             };
 
             context.Response.StatusCode = (int)statusCode;
 
+            string safeMessage;
+            if (statusCode == HttpStatusCode.InternalServerError && !isDevelopment)
+            {
+                safeMessage = "An unexpected server error occurred. Please try again later.";
+            }
+            else
+            {
+                safeMessage = exception.Message;
+            }
+
             var response = new
             {
                 statusCode = (int)statusCode,
-                message = exception.Message,
+                message = safeMessage,
                 timestampUtc = DateTime.UtcNow
             };
 
