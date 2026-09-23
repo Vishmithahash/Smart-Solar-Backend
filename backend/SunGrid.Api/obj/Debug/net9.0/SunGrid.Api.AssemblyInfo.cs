@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SunGrid.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2e4eea1b83fdac86cb8b12e907a73053840d260c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2259a8b6e55df893cf554cdda5edf65210276a83")]
 [assembly: System.Reflection.AssemblyProductAttribute("SunGrid.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SunGrid.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
