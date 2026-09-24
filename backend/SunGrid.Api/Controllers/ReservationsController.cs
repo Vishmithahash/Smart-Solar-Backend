@@ -78,6 +78,8 @@ namespace SunGrid.Api.Controllers
         /// Retrieves a paginated list of reservations for the authenticated Prosumer (Prosumer only).
         /// </summary>
         [HttpGet("me")]
+        [HttpGet("my-reservations")]
+        [HttpGet("user/{userId}")]
         [Authorize]
         [ProducesResponseType(typeof(ReservationListResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

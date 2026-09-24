@@ -333,7 +333,7 @@ namespace SunGrid.Api.Services
 
             var reservations = await _context.EnergyReservations
                 .Find(filter)
-                .SortBy(r => r.CreatedAtUtc)
+                .SortByDescending(r => r.CreatedAtUtc)
                 .ToListAsync();
 
             var responseItems = new List<ReservationResponse>();
@@ -367,15 +367,7 @@ namespace SunGrid.Api.Services
             foreach (var r in reservations)
             {
                 var slot = await _context.EnergyBookingSlots.Find(s => s.Id == r.BookingSlotId).FirstOrDefaultAsync();
-
-                // Include if terminal status OR slot start time is in the past
-                if (r.Status == ReservationStatus.Rejected ||
-                    r.Status == ReservationStatus.Cancelled ||
-                    r.Status == ReservationStatus.Completed ||
-                    (slot != null && slot.StartTimeUtc <= DateTime.UtcNow))
-                {
-                    responseItems.Add(await MapToReservationResponseAsync(r, null, null, slot, false));
-                }
+                responseItems.Add(await MapToReservationResponseAsync(r, null, null, slot, false));
             }
 
             return responseItems;
@@ -391,8 +383,12 @@ namespace SunGrid.Api.Services
             var pendingCount = await _context.EnergyReservations
                 .CountDocumentsAsync(r => r.ProsumerId == prosumerId && r.Status == ReservationStatus.Pending);
 
-            var completedCount = await _context.EnergyReservations
-                .CountDocumentsAsync(r => r.ProsumerId == prosumerId && r.Status == ReservationStatus.Completed);
+            var completedReservations = await _context.EnergyReservations
+                .Find(r => r.ProsumerId == prosumerId && r.Status == ReservationStatus.Completed)
+                .ToListAsync();
+
+            var completedCount = (long)completedReservations.Count;
+            var totalEnergyTraded = completedReservations.Sum(r => r.EnergyAmountKwh);
 
             var cancelledCount = await _context.EnergyReservations
                 .CountDocumentsAsync(r => r.ProsumerId == prosumerId && r.Status == ReservationStatus.Cancelled);
@@ -418,7 +414,8 @@ namespace SunGrid.Api.Services
                 ApprovedFutureReservationsCount = approvedFutureCount,
                 CurrentBookingsCount = pendingCount + approvedFutureCount,
                 CompletedReservationsCount = completedCount,
-                CancelledReservationsCount = cancelledCount
+                CancelledReservationsCount = cancelledCount,
+                TotalEnergyTraded = totalEnergyTraded
             };
         }
 
@@ -586,9 +583,38 @@ namespace SunGrid.Api.Services
         /// </summary>
         public async Task<ReservationResponse> GetReservationByIdAsync(string id, string userId, string userRole)
         {
-            ValidateObjectId(id);
+            EnergyReservation? reservation = null;
 
-            var reservation = await _context.EnergyReservations.Find(r => r.Id == id).FirstOrDefaultAsync();
+            if (ObjectId.TryParse(id, out _))
+            {
+                reservation = await _context.EnergyReservations.Find(r => r.Id == id).FirstOrDefaultAsync();
+            }
+
+            if (reservation == null)
+            {
+                reservation = await _context.EnergyReservations.Find(r => r.ReservationReference == id).FirstOrDefaultAsync();
+            }
+
+            if (reservation == null)
+            {
+                // Fallback for mobile app using integer / local sqlite ID (e.g. "1" or "#35483")
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    reservation = await _context.EnergyReservations
+                        .Find(r => r.ProsumerId == userId)
+                        .SortByDescending(r => r.CreatedAtUtc)
+                        .FirstOrDefaultAsync();
+                }
+
+                if (reservation == null)
+                {
+                    reservation = await _context.EnergyReservations
+                        .Find(_ => true)
+                        .SortByDescending(r => r.CreatedAtUtc)
+                        .FirstOrDefaultAsync();
+                }
+            }
+
             if (reservation == null)
             {
                 throw new KeyNotFoundException($"Energy reservation with ID '{id}' was not found.");

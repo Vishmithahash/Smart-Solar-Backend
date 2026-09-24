@@ -111,6 +111,9 @@ namespace SunGrid.Api.DTOs
         public string BookingSlotId { get; set; } = string.Empty;
         public DateTime SlotStartTimeUtc { get; set; }
         public DateTime SlotEndTimeUtc { get; set; }
+        public DateTime ScheduledStartTime => SlotStartTimeUtc;
+        public DateTime ScheduledEndTime => SlotEndTimeUtc;
+        public string ScheduledTime => SlotStartTimeUtc.ToString("yyyy-MM-dd HH:mm");
         public string TransferType { get; set; } = string.Empty;
         public double EnergyAmountKwh { get; set; }
         public string Status { get; set; } = string.Empty;
@@ -152,6 +155,12 @@ namespace SunGrid.Api.DTOs
         public long CurrentBookingsCount { get; set; }
         public long CompletedReservationsCount { get; set; }
         public long CancelledReservationsCount { get; set; }
+        public long ActiveBookings => CurrentBookingsCount;
+        public long ActiveBookingsCount => CurrentBookingsCount;
+        public long TotalActive => CurrentBookingsCount;
+        public double TotalEnergyTraded { get; set; }
+        public double TotalEnergyTradedKwh => TotalEnergyTraded;
+        public double TotalEnergyKwhTraded => TotalEnergyTraded;
     }
 
     /// <summary>
