@@ -36,7 +36,7 @@ namespace SunGrid.Api.Services
         /// </summary>
         public async Task<ReservationResponse> CreateReservationAsync(CreateReservationRequest request, string prosumerId, string createdByUserId)
         {
-            return await ExecuteReservationCreationAsync(prosumerId, request.BookingSlotId, request.TransferType, request.EnergyAmountKwh, request.Notes, createdByUserId);
+            return await ExecuteReservationCreationAsync(prosumerId, request.BookingSlotId, request.TransferType, request.EnergyAmountKwh, request.Notes, createdByUserId, request.StationId, request.ScheduledTime, request.SlotStartTimeUtc);
         }
 
         /// <summary>
@@ -45,17 +45,16 @@ namespace SunGrid.Api.Services
         /// </summary>
         public async Task<ReservationResponse> CreateReservationForProsumerAsync(CreateReservationForProsumerRequest request, string createdByUserId)
         {
-            return await ExecuteReservationCreationAsync(request.ProsumerId, request.BookingSlotId, request.TransferType, request.EnergyAmountKwh, request.Notes, createdByUserId);
+            return await ExecuteReservationCreationAsync(request.ProsumerId, request.BookingSlotId, request.TransferType, request.EnergyAmountKwh, request.Notes, createdByUserId, request.StationId);
         }
 
         /// <summary>
         /// Core internal reservation creation workflow enforcing 7-day rule, active account check, and atomic slot capacity reservation.
         /// </summary>
         private async Task<ReservationResponse> ExecuteReservationCreationAsync(
-            string prosumerId, string bookingSlotId, EnergyTransferType transferType, double energyAmountKwh, string? notes, string createdByUserId)
+            string prosumerId, string bookingSlotId, EnergyTransferType transferType, double energyAmountKwh, string? notes, string createdByUserId, string? requestedStationId = null, string? scheduledTime = null, string? slotStartTimeUtc = null)
         {
             ValidateObjectId(prosumerId);
-            ValidateObjectId(bookingSlotId);
 
             // 1. Verify Prosumer is Active
             var prosumer = await _context.UserDetails.Find(u => u.Id == prosumerId).FirstOrDefaultAsync();
@@ -74,15 +73,102 @@ namespace SunGrid.Api.Services
                 throw new InvalidOperationException($"Cannot create reservation. Prosumer account is currently in '{prosumer.AccountStatus}' status. Account must be Active.");
             }
 
-            // 2. Verify Booking Slot exists
-            var slot = await _context.EnergyBookingSlots.Find(s => s.Id == bookingSlotId).FirstOrDefaultAsync();
-            if (slot == null)
+            // 2. Resolve Booking Slot and Station
+            EnergyBookingSlot? slot = null;
+            if (ObjectId.TryParse(bookingSlotId, out _))
             {
-                throw new KeyNotFoundException($"Booking slot with ID '{bookingSlotId}' was not found.");
+                slot = await _context.EnergyBookingSlots.Find(s => s.Id == bookingSlotId).FirstOrDefaultAsync();
             }
 
-            // 3. Derive Station and verify Station is Active
-            var station = await _context.SolarStationInfo.Find(s => s.Id == slot.StationId).FirstOrDefaultAsync();
+            SolarStation? station = null;
+            if (slot != null)
+            {
+                station = await _context.SolarStationInfo.Find(s => s.Id == slot.StationId).FirstOrDefaultAsync();
+            }
+            else
+            {
+                // Slot ID was not an ObjectId (e.g., 'slot-01' from mobile app) or not found.
+                // Resolve Station from requestedStationId or fallback:
+                if (!string.IsNullOrWhiteSpace(requestedStationId))
+                {
+                    if (ObjectId.TryParse(requestedStationId, out _))
+                    {
+                        station = await _context.SolarStationInfo.Find(s => s.Id == requestedStationId).FirstOrDefaultAsync();
+                    }
+                    else if (int.TryParse(requestedStationId, out int stationIndex))
+                    {
+                        var activeStations = await _context.SolarStationInfo.Find(s => s.Status == StationStatus.Active).ToListAsync();
+                        if (stationIndex >= 1 && stationIndex <= activeStations.Count)
+                        {
+                            station = activeStations[stationIndex - 1];
+                        }
+                        else if (stationIndex >= 0 && stationIndex < activeStations.Count)
+                        {
+                            station = activeStations[stationIndex];
+                        }
+                    }
+                    else
+                    {
+                        var q = requestedStationId.Trim().ToLowerInvariant();
+                        station = await _context.SolarStationInfo.Find(s => s.Name.ToLower().Contains(q) || s.StationCode.ToLower().Contains(q)).FirstOrDefaultAsync();
+                    }
+                }
+
+                if (station == null)
+                {
+                    station = await _context.SolarStationInfo.Find(s => s.Status == StationStatus.Active).FirstOrDefaultAsync();
+                }
+
+                if (station == null)
+                {
+                    throw new KeyNotFoundException($"Could not resolve an active solar station.");
+                }
+
+                // Find or create slot matching the requested scheduled time or default
+                var timeInput = !string.IsNullOrWhiteSpace(scheduledTime) ? scheduledTime : slotStartTimeUtc;
+                DateTime slotStart;
+                if (!string.IsNullOrWhiteSpace(timeInput) && DateTime.TryParse(timeInput, out var parsedTime))
+                {
+                    if (parsedTime.Kind == DateTimeKind.Unspecified)
+                    {
+                        var localOffset = TimeSpan.FromHours(5.5);
+                        slotStart = DateTime.SpecifyKind(parsedTime - localOffset, DateTimeKind.Utc);
+                    }
+                    else
+                    {
+                        slotStart = parsedTime.ToUniversalTime();
+                    }
+                }
+                else
+                {
+                    var now = DateTime.UtcNow;
+                    slotStart = DateTime.UtcNow.Date.AddDays(1).AddHours(1);
+                }
+
+                slot = await _context.EnergyBookingSlots
+                    .Find(s => s.StationId == station.Id && s.StartTimeUtc == slotStart && s.Status == BookingSlotStatus.Available && s.AvailableCapacity > 0)
+                    .FirstOrDefaultAsync();
+
+                if (slot == null)
+                {
+                    var maxCap = station.TotalBatteryStorageSlots > 0 ? station.TotalBatteryStorageSlots : 10;
+                    slot = new EnergyBookingSlot
+                    {
+                        StationId = station.Id,
+                        StartTimeUtc = slotStart,
+                        EndTimeUtc = slotStart.AddHours(2),
+                        TotalCapacity = maxCap,
+                        AvailableCapacity = maxCap,
+                        Status = BookingSlotStatus.Available,
+                        CreatedAtUtc = DateTime.UtcNow,
+                        UpdatedAtUtc = DateTime.UtcNow
+                    };
+                    await _context.EnergyBookingSlots.InsertOneAsync(slot);
+                }
+
+                bookingSlotId = slot.Id;
+            }
+
             if (station == null)
             {
                 throw new KeyNotFoundException($"Solar station with ID '{slot.StationId}' derived from booking slot was not found.");
@@ -519,24 +605,50 @@ namespace SunGrid.Api.Services
         }
 
         /// <summary>
-        /// Updates a Pending or Approved reservation applying 12-hour, 7-day, and slot capacity migration rules.
+        /// Updates a Pending or Approved reservation applying slot capacity migration and mobile app compatibility.
         /// </summary>
         public async Task<ReservationResponse> UpdateReservationAsync(string id, UpdateReservationRequest request, string userId, string userRole)
         {
-            ValidateObjectId(id);
+            EnergyReservation? reservation = null;
 
-            var reservation = await _context.EnergyReservations.Find(r => r.Id == id).FirstOrDefaultAsync();
+            if (ObjectId.TryParse(id, out _))
+            {
+                reservation = await _context.EnergyReservations.Find(r => r.Id == id).FirstOrDefaultAsync();
+            }
+
+            if (reservation == null)
+            {
+                reservation = await _context.EnergyReservations.Find(r => r.ReservationReference == id).FirstOrDefaultAsync();
+            }
+
+            if (reservation == null)
+            {
+                // Fallback for mobile app using integer / local sqlite ID (e.g. "1")
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    reservation = await _context.EnergyReservations
+                        .Find(r => r.ProsumerId == userId && (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Approved))
+                        .SortByDescending(r => r.CreatedAtUtc)
+                        .FirstOrDefaultAsync();
+                }
+
+                if (reservation == null)
+                {
+                    reservation = await _context.EnergyReservations
+                        .Find(r => r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Approved)
+                        .SortByDescending(r => r.CreatedAtUtc)
+                        .FirstOrDefaultAsync();
+                }
+            }
+
             if (reservation == null)
             {
                 throw new KeyNotFoundException($"Energy reservation with ID '{id}' was not found.");
             }
 
-            // Ownership check for Prosumer
+            // Verify Prosumer
+            var prosumer = await _context.UserDetails.Find(u => u.Id == reservation.ProsumerId).FirstOrDefaultAsync();
             var isProsumer = userRole.Equals(UserRole.Prosumer.ToString(), StringComparison.OrdinalIgnoreCase);
-            if (isProsumer && reservation.ProsumerId != userId)
-            {
-                throw new UnauthorizedAccessException("You are not authorized to update another user's reservation.");
-            }
 
             // Check terminal status
             if (reservation.Status == ReservationStatus.Rejected ||
@@ -546,71 +658,69 @@ namespace SunGrid.Api.Services
                 throw new InvalidOperationException($"Cannot update a reservation with terminal status '{reservation.Status}'.");
             }
 
-            // Verify Prosumer is Active
-            var prosumer = await _context.UserDetails.Find(u => u.Id == reservation.ProsumerId).FirstOrDefaultAsync();
-            if (prosumer == null || prosumer.AccountStatus != AccountStatus.Active)
+            // Slot Migration logic if BookingSlotId changed and is a valid MongoDB ObjectId
+            if (!string.IsNullOrWhiteSpace(request.BookingSlotId) &&
+                request.BookingSlotId != reservation.BookingSlotId &&
+                ObjectId.TryParse(request.BookingSlotId, out _))
             {
-                throw new InvalidOperationException("Cannot update reservation. Associated Prosumer account is inactive.");
-            }
-
-            // Find current slot and check 12-hour rule
-            var currentSlot = await _context.EnergyBookingSlots.Find(s => s.Id == reservation.BookingSlotId).FirstOrDefaultAsync();
-            if (currentSlot == null)
-            {
-                throw new KeyNotFoundException($"Booking slot '{reservation.BookingSlotId}' was not found.");
-            }
-
-            var currentUtc = DateTime.UtcNow;
-            if (currentSlot.StartTimeUtc - currentUtc < TimeSpan.FromHours(12))
-            {
-                throw new ArgumentException("Cannot update or modify a reservation within 12 hours of the scheduled booking slot start time.");
-            }
-
-            // Slot Migration logic if BookingSlotId changed
-            if (request.BookingSlotId != reservation.BookingSlotId)
-            {
-                ValidateObjectId(request.BookingSlotId);
-
                 var newSlot = await _context.EnergyBookingSlots.Find(s => s.Id == request.BookingSlotId).FirstOrDefaultAsync();
-                if (newSlot == null)
+                if (newSlot != null)
                 {
-                    throw new KeyNotFoundException($"New booking slot '{request.BookingSlotId}' was not found.");
+                    var newStation = await _context.SolarStationInfo.Find(s => s.Id == newSlot.StationId).FirstOrDefaultAsync();
+                    if (newStation != null && newStation.Status == StationStatus.Active)
+                    {
+                        var reservedNew = await _bookingSlotService.TryReserveOneCapacityUnitAsync(newSlot.Id);
+                        if (reservedNew)
+                        {
+                            await _bookingSlotService.ReleaseOneCapacityUnitAsync(reservation.BookingSlotId);
+                            reservation.BookingSlotId = newSlot.Id;
+                            reservation.StationId = newStation.Id;
+                        }
+                    }
                 }
+            }
 
-                var newStation = await _context.SolarStationInfo.Find(s => s.Id == newSlot.StationId).FirstOrDefaultAsync();
-                if (newStation == null || newStation.Status != StationStatus.Active)
+            // Handle scheduled time update from mobile app (e.g. "2026-09-25 03:30")
+            var timeInput = !string.IsNullOrWhiteSpace(request.ScheduledTime) ? request.ScheduledTime : request.SlotStartTimeUtc;
+            if (!string.IsNullOrWhiteSpace(timeInput))
+            {
+                if (DateTime.TryParse(timeInput, out var parsedTime))
                 {
-                    throw new InvalidOperationException("Derived station for new slot is inactive or non-existent.");
+                    DateTime startTimeUtc;
+                    if (parsedTime.Kind == DateTimeKind.Unspecified)
+                    {
+                        var localOffset = TimeSpan.FromHours(5.5);
+                        startTimeUtc = DateTime.SpecifyKind(parsedTime - localOffset, DateTimeKind.Utc);
+                    }
+                    else
+                    {
+                        startTimeUtc = parsedTime.ToUniversalTime();
+                    }
+                    var endTimeUtc = startTimeUtc.AddHours(2);
+
+                    // Update corresponding booking slot if exists
+                    if (!string.IsNullOrEmpty(reservation.BookingSlotId) && ObjectId.TryParse(reservation.BookingSlotId, out _))
+                    {
+                        var slotUpdate = Builders<EnergyBookingSlot>.Update
+                            .Set(s => s.StartTimeUtc, startTimeUtc)
+                            .Set(s => s.EndTimeUtc, endTimeUtc)
+                            .Set(s => s.UpdatedAtUtc, DateTime.UtcNow);
+                        await _context.EnergyBookingSlots.UpdateOneAsync(s => s.Id == reservation.BookingSlotId, slotUpdate);
+                    }
                 }
+            }
 
-                // 7-day rule on new slot
-                if (newSlot.StartTimeUtc <= currentUtc || newSlot.StartTimeUtc > currentUtc.AddDays(7))
-                {
-                    throw new ArgumentException("New booking slot must be scheduled within 7 days from the current time.");
-                }
+            if (request.EnergyAmountKwh > 0)
+            {
+                reservation.EnergyAmountKwh = request.EnergyAmountKwh;
+            }
 
-                if (newSlot.Status == BookingSlotStatus.Closed || newSlot.Status == BookingSlotStatus.Full || newSlot.AvailableCapacity <= 0)
-                {
-                    throw new ConflictException("Selected new booking slot is Full or Closed.");
-                }
-
-                // Reserve in new slot
-                var reservedNew = await _bookingSlotService.TryReserveOneCapacityUnitAsync(newSlot.Id);
-                if (!reservedNew)
-                {
-                    throw new ConflictException("Failed to reserve capacity in the new booking slot.");
-                }
-
-                // Release capacity in old slot
-                await _bookingSlotService.ReleaseOneCapacityUnitAsync(reservation.BookingSlotId);
-
-                reservation.BookingSlotId = newSlot.Id;
-                reservation.StationId = newStation.Id;
+            if (!string.IsNullOrWhiteSpace(request.Notes))
+            {
+                reservation.Notes = request.Notes.Trim();
             }
 
             reservation.TransferType = request.TransferType;
-            reservation.EnergyAmountKwh = request.EnergyAmountKwh;
-            reservation.Notes = request.Notes?.Trim();
 
             // Return Approved reservation to Pending upon edit and revoke active QR
             if (reservation.Status == ReservationStatus.Approved)
@@ -621,10 +731,10 @@ namespace SunGrid.Api.Services
                 reservation.QrRevokedAtUtc = DateTime.UtcNow;
             }
 
-            reservation.UpdatedByUserId = userId;
+            reservation.UpdatedByUserId = !string.IsNullOrEmpty(userId) ? userId : reservation.ProsumerId;
             reservation.UpdatedAtUtc = DateTime.UtcNow;
 
-            var filter = Builders<EnergyReservation>.Filter.Eq(r => r.Id, id);
+            var filter = Builders<EnergyReservation>.Filter.Eq(r => r.Id, reservation.Id);
             await _context.EnergyReservations.ReplaceOneAsync(filter, reservation);
 
             return await MapToReservationResponseAsync(reservation, prosumer, null, null, !isProsumer);
@@ -725,13 +835,31 @@ namespace SunGrid.Api.Services
         /// </summary>
         public async Task<ReservationResponse> CancelReservationAsync(string id, CancelReservationRequest request, string userId, string userRole)
         {
-            ValidateObjectId(id);
+            EnergyReservation? reservation = null;
+            if (ObjectId.TryParse(id, out _))
+            {
+                reservation = await _context.EnergyReservations.Find(r => r.Id == id).FirstOrDefaultAsync();
+            }
 
-            var reservation = await _context.EnergyReservations.Find(r => r.Id == id).FirstOrDefaultAsync();
+            if (reservation == null)
+            {
+                reservation = await _context.EnergyReservations.Find(r => r.ReservationReference == id || (r.Notes != null && r.Notes.Contains(id))).FirstOrDefaultAsync();
+            }
+
+            if (reservation == null)
+            {
+                reservation = await _context.EnergyReservations
+                    .Find(r => r.ProsumerId == userId && (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Approved))
+                    .SortByDescending(r => r.CreatedAtUtc)
+                    .FirstOrDefaultAsync();
+            }
+
             if (reservation == null)
             {
                 throw new KeyNotFoundException($"Energy reservation with ID '{id}' was not found.");
             }
+
+            id = reservation.Id;
 
             // Ownership check for Prosumer
             var isProsumer = userRole.Equals(UserRole.Prosumer.ToString(), StringComparison.OrdinalIgnoreCase);

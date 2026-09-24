@@ -102,61 +102,24 @@ namespace SunGrid.Api.Data
                 operatorUser = existingOperator;
             }
 
-            // 3. Seed Prosumer 1 User
-            var prosumer1Email = "prosumer1@sungrid.com";
-            var existingProsumer1 = await _context.UserDetails.Find(u => u.Email == prosumer1Email).FirstOrDefaultAsync();
-            User prosumer1User;
-            if (existingProsumer1 == null)
+            // 3. Clean up legacy dummy prosumers and sample test reservations
+            var deletedReservations = await _context.EnergyReservations.DeleteManyAsync(r => 
+                r.ReservationReference == "RES-20260922-000001" || 
+                r.ReservationReference == "RES-20260922-000002");
+            if (deletedReservations.DeletedCount > 0)
             {
-                prosumer1User = new User
-                {
-                    Email = prosumer1Email,
-                    FullName = "Sunil Perera (Prosumer)",
-                    Nic = "199598765432V",
-                    PhoneNumber = "+94719876543",
-                    Address = "No 45, Main Street, Colombo 03",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("ProsumerPassword123!"),
-                    Role = UserRole.Prosumer,
-                    AccountStatus = AccountStatus.Active,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                await _context.UserDetails.InsertOneAsync(prosumer1User);
-                _logger.LogInformation("Successfully created Prosumer 1 account: {Email}", prosumer1Email);
-            }
-            else
-            {
-                prosumer1User = existingProsumer1;
+                _logger.LogInformation("Cleaned up {Count} legacy sample reservations", deletedReservations.DeletedCount);
             }
 
-            // 4. Seed Prosumer 2 User
-            var prosumer2Email = "prosumer2@sungrid.com";
-            var existingProsumer2 = await _context.UserDetails.Find(u => u.Email == prosumer2Email).FirstOrDefaultAsync();
-            User prosumer2User;
-            if (existingProsumer2 == null)
+            var deletedUsers = await _context.UserDetails.DeleteManyAsync(u => 
+                u.Email == "prosumer1@sungrid.com" || 
+                u.Email == "prosumer2@sungrid.com");
+            if (deletedUsers.DeletedCount > 0)
             {
-                prosumer2User = new User
-                {
-                    Email = prosumer2Email,
-                    FullName = "Nimali Silva (Prosumer)",
-                    Nic = "199256789123V",
-                    PhoneNumber = "+94705554433",
-                    Address = "No 12, Station Road, Galle",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("ProsumerPassword123!"),
-                    Role = UserRole.Prosumer,
-                    AccountStatus = AccountStatus.Active,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                await _context.UserDetails.InsertOneAsync(prosumer2User);
-                _logger.LogInformation("Successfully created Prosumer 2 account: {Email}", prosumer2Email);
-            }
-            else
-            {
-                prosumer2User = existingProsumer2;
+                _logger.LogInformation("Cleaned up {Count} dummy seed prosumers from database", deletedUsers.DeletedCount);
             }
 
-            // 5. Seed Solar Stations
+            // 4. Seed Solar Stations
             var defaultOperatingSchedule = Enum.GetValues<DayOfWeek>().Select(day => new DayOperatingSchedule
             {
                 DayOfWeek = day,
@@ -211,7 +174,7 @@ namespace SunGrid.Api.Data
                 _logger.LogInformation("Successfully created Solar Station: ST-KND-002");
             }
 
-            // 6. Seed Energy Booking Slots for Colombo Station
+            // 5. Seed Energy Booking Slots for Colombo Station
             var tomorrowBase = DateTime.UtcNow.Date.AddDays(1);
             var slot1Start = tomorrowBase.AddHours(9);  // 09:00 UTC tomorrow
             var slot1End = tomorrowBase.AddHours(11);   // 11:00 UTC tomorrow
@@ -228,7 +191,7 @@ namespace SunGrid.Api.Data
                     StartTimeUtc = slot1Start,
                     EndTimeUtc = slot1End,
                     TotalCapacity = 5,
-                    AvailableCapacity = 4, // 1 reserved below
+                    AvailableCapacity = 5,
                     Status = BookingSlotStatus.Available,
                     CreatedByUserId = operatorUser.Id,
                     UpdatedByUserId = operatorUser.Id,
@@ -254,7 +217,7 @@ namespace SunGrid.Api.Data
                     StartTimeUtc = slot2Start,
                     EndTimeUtc = slot2End,
                     TotalCapacity = 5,
-                    AvailableCapacity = 4, // 1 reserved below
+                    AvailableCapacity = 5,
                     Status = BookingSlotStatus.Available,
                     CreatedByUserId = operatorUser.Id,
                     UpdatedByUserId = operatorUser.Id,
@@ -263,55 +226,6 @@ namespace SunGrid.Api.Data
                 };
                 await _context.EnergyBookingSlots.InsertOneAsync(slot2);
                 _logger.LogInformation("Successfully created Booking Slot 2 for station {StationCode}", colomboStation.StationCode);
-            }
-
-            // 7. Seed Sample Reservations
-            var res1Ref = "RES-20260922-000001";
-            var existingRes1 = await _context.EnergyReservations.Find(r => r.ReservationReference == res1Ref).FirstOrDefaultAsync();
-            if (existingRes1 == null)
-            {
-                var res1 = new EnergyReservation
-                {
-                    ReservationReference = res1Ref,
-                    ProsumerId = prosumer1User.Id,
-                    StationId = colomboStation.Id,
-                    BookingSlotId = slot1.Id,
-                    TransferType = EnergyTransferType.EnergyDropOff,
-                    EnergyAmountKwh = 25.5,
-                    Status = ReservationStatus.Pending,
-                    Notes = "Sample drop-off reservation created for testing",
-                    CreatedByUserId = prosumer1User.Id,
-                    UpdatedByUserId = prosumer1User.Id,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                await _context.EnergyReservations.InsertOneAsync(res1);
-                _logger.LogInformation("Successfully created sample reservation: {Ref}", res1Ref);
-            }
-
-            var res2Ref = "RES-20260922-000002";
-            var existingRes2 = await _context.EnergyReservations.Find(r => r.ReservationReference == res2Ref).FirstOrDefaultAsync();
-            if (existingRes2 == null)
-            {
-                var res2 = new EnergyReservation
-                {
-                    ReservationReference = res2Ref,
-                    ProsumerId = prosumer2User.Id,
-                    StationId = colomboStation.Id,
-                    BookingSlotId = slot2.Id,
-                    TransferType = EnergyTransferType.Charging,
-                    EnergyAmountKwh = 40.0,
-                    Status = ReservationStatus.Approved,
-                    Notes = "Sample approved charging reservation",
-                    CreatedByUserId = prosumer2User.Id,
-                    UpdatedByUserId = operatorUser.Id,
-                    ApprovedByUserId = operatorUser.Id,
-                    ApprovedAtUtc = DateTime.UtcNow,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                await _context.EnergyReservations.InsertOneAsync(res2);
-                _logger.LogInformation("Successfully created sample reservation: {Ref}", res2Ref);
             }
         }
     }

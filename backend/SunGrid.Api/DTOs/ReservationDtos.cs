@@ -16,11 +16,17 @@ namespace SunGrid.Api.DTOs
         [Required(ErrorMessage = "BookingSlotId is required.")]
         public string BookingSlotId { get; set; } = string.Empty;
 
+        public string? StationId { get; set; }
+
         [Required(ErrorMessage = "TransferType is required.")]
         public EnergyTransferType TransferType { get; set; }
 
         [Range(0.01, 100000.0, ErrorMessage = "EnergyAmountKwh must be greater than zero.")]
         public double EnergyAmountKwh { get; set; }
+
+        public string? ScheduledTime { get; set; }
+
+        public string? SlotStartTimeUtc { get; set; }
 
         [StringLength(500, ErrorMessage = "Notes cannot exceed 500 characters.")]
         public string? Notes { get; set; }
@@ -37,6 +43,8 @@ namespace SunGrid.Api.DTOs
         [Required(ErrorMessage = "BookingSlotId is required.")]
         public string BookingSlotId { get; set; } = string.Empty;
 
+        public string? StationId { get; set; }
+
         [Required(ErrorMessage = "TransferType is required.")]
         public EnergyTransferType TransferType { get; set; }
 
@@ -52,14 +60,17 @@ namespace SunGrid.Api.DTOs
     /// </summary>
     public class UpdateReservationRequest
     {
-        [Required(ErrorMessage = "BookingSlotId is required.")]
-        public string BookingSlotId { get; set; } = string.Empty;
+        public string? BookingSlotId { get; set; }
 
-        [Required(ErrorMessage = "TransferType is required.")]
-        public EnergyTransferType TransferType { get; set; }
+        public EnergyTransferType TransferType { get; set; } = EnergyTransferType.EnergyDropOff;
 
-        [Range(0.01, 100000.0, ErrorMessage = "EnergyAmountKwh must be greater than zero.")]
         public double EnergyAmountKwh { get; set; }
+
+        public string? ScheduledTime { get; set; }
+
+        public string? SlotStartTimeUtc { get; set; }
+
+        public string? StationId { get; set; }
 
         [StringLength(500, ErrorMessage = "Notes cannot exceed 500 characters.")]
         public string? Notes { get; set; }

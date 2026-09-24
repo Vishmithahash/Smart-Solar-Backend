@@ -34,12 +34,16 @@ namespace SunGrid.Api.DTOs
     }
 
     /// <summary>
-    /// Request payload sent by Grid Operator containing scanned QR payload string.
+    /// Request payload sent by Grid Operator containing scanned QR payload string or reservation reference.
     /// </summary>
     public class VerifyQrRequest
     {
-        [Required(ErrorMessage = "QrPayload is required.")]
-        public string QrPayload { get; set; } = string.Empty;
+        public string? QrPayload { get; set; }
+        public string? Qr_Payload { get => QrPayload; set => QrPayload = value; }
+        public string? ReservationId { get; set; }
+        public string? Reservation_Id { get => ReservationId; set => ReservationId = value; }
+        public string? BookingId { get; set; }
+        public string? Booking_Id { get => BookingId; set => BookingId = value; }
     }
 
     /// <summary>
@@ -73,14 +77,21 @@ namespace SunGrid.Api.DTOs
     /// </summary>
     public class CompleteEnergyTransferRequest
     {
-        [Required(ErrorMessage = "QrPayload is required.")]
-        public string QrPayload { get; set; } = string.Empty;
+        public string? QrPayload { get; set; }
+        public string? Qr_Payload { get => QrPayload; set => QrPayload = value; }
 
-        [Range(0.01, 100000.0, ErrorMessage = "ActualEnergyAmountKwh must be greater than zero.")]
-        public double ActualEnergyAmountKwh { get; set; }
+        public string? ReservationId { get; set; }
+        public string? Reservation_Id { get => ReservationId; set => ReservationId = value; }
 
-        [StringLength(500, ErrorMessage = "CompletionNotes cannot exceed 500 characters.")]
+        public string? BookingId { get; set; }
+        public string? Booking_Id { get => BookingId; set => BookingId = value; }
+
+        public double? ActualEnergyAmountKwh { get; set; }
+        public double? Actual_Energy_Amount_Kwh { get => ActualEnergyAmountKwh; set => ActualEnergyAmountKwh = value; }
+        public double? EnergyAmountKwh { get => ActualEnergyAmountKwh; set => ActualEnergyAmountKwh = value; }
+
         public string? CompletionNotes { get; set; }
+        public string? Notes { get => CompletionNotes; set => CompletionNotes = value; }
     }
 
     /// <summary>

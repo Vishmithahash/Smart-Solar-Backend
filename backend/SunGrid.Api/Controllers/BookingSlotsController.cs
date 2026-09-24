@@ -50,9 +50,8 @@ namespace SunGrid.Api.Controllers
         /// Apply role-based visibility restrictions: Prosumers see future Available slots only.
         /// </summary>
         [HttpGet("api/stations/{stationId}/slots")]
-        [Authorize]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(List<BookingSlotResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetSlotsForStation(
             [FromRoute] string stationId,

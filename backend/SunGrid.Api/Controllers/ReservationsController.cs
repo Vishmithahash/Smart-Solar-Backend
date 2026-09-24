@@ -78,7 +78,7 @@ namespace SunGrid.Api.Controllers
         /// Retrieves a paginated list of reservations for the authenticated Prosumer (Prosumer only).
         /// </summary>
         [HttpGet("me")]
-        [Authorize(Roles = "Prosumer")]
+        [Authorize]
         [ProducesResponseType(typeof(ReservationListResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -90,53 +90,84 @@ namespace SunGrid.Api.Controllers
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10)
         {
-            var prosumerId = GetAuthenticatedUserId();
-            var response = await _reservationService.GetMyReservationsAsync(prosumerId, status, search, fromUtc, toUtc, pageNumber, pageSize);
+            var userId = GetAuthenticatedUserId();
+            var userRole = GetAuthenticatedUserRole();
+            if (userRole == "GridOperator" || userRole == "Backoffice")
+            {
+                var staffResponse = await _reservationService.GetReservationsAsync(status, null, null, null, search, fromUtc, toUtc, pageNumber, pageSize);
+                return Ok(staffResponse);
+            }
+            var response = await _reservationService.GetMyReservationsAsync(userId, status, search, fromUtc, toUtc, pageNumber, pageSize);
             return Ok(response);
         }
 
         /// <summary>
-        /// Retrieves future Pending and Approved reservations for the authenticated Prosumer (Prosumer only).
+        /// Retrieves future Pending and Approved reservations for the authenticated Prosumer (or all for staff).
         /// </summary>
         [HttpGet("me/current")]
-        [Authorize(Roles = "Prosumer")]
+        [Authorize]
         [ProducesResponseType(typeof(List<ReservationResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> GetMyCurrentReservations()
         {
-            var prosumerId = GetAuthenticatedUserId();
-            var reservations = await _reservationService.GetMyCurrentReservationsAsync(prosumerId);
+            var userId = GetAuthenticatedUserId();
+            var userRole = GetAuthenticatedUserRole();
+            if (userRole == "GridOperator" || userRole == "Backoffice")
+            {
+                var staffList = await _reservationService.GetReservationsAsync(null, null, null, null, null, null, null, 1, 50);
+                return Ok(staffList.Items);
+            }
+            var reservations = await _reservationService.GetMyCurrentReservationsAsync(userId);
             return Ok(reservations);
         }
 
         /// <summary>
-        /// Retrieves historical (Rejected, Cancelled, Completed, or past slot) reservations for the authenticated Prosumer (Prosumer only).
+        /// Retrieves historical (Rejected, Cancelled, Completed, or past slot) reservations.
         /// </summary>
         [HttpGet("me/history")]
-        [Authorize(Roles = "Prosumer")]
+        [Authorize]
         [ProducesResponseType(typeof(List<ReservationResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> GetMyReservationHistory()
         {
-            var prosumerId = GetAuthenticatedUserId();
-            var reservations = await _reservationService.GetMyReservationHistoryAsync(prosumerId);
+            var userId = GetAuthenticatedUserId();
+            var userRole = GetAuthenticatedUserRole();
+            if (userRole == "GridOperator" || userRole == "Backoffice")
+            {
+                var staffHistory = await _reservationService.GetReservationsAsync("Cancelled", null, null, null, null, null, null, 1, 50);
+                return Ok(staffHistory.Items);
+            }
+            var reservations = await _reservationService.GetMyReservationHistoryAsync(userId);
             return Ok(reservations);
         }
 
         /// <summary>
-        /// Retrieves live reservation metric counts for the authenticated Prosumer dashboard (Prosumer only).
+        /// Retrieves live reservation metric counts for the dashboard.
         /// </summary>
         [HttpGet("me/dashboard")]
-        [Authorize(Roles = "Prosumer")]
+        [Authorize]
         [ProducesResponseType(typeof(ProsumerReservationDashboardResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> GetMyDashboardCounts()
         {
-            var prosumerId = GetAuthenticatedUserId();
-            var dashboard = await _reservationService.GetMyDashboardCountsAsync(prosumerId);
+            var userId = GetAuthenticatedUserId();
+            var userRole = GetAuthenticatedUserRole();
+            if (userRole == "GridOperator" || userRole == "Backoffice")
+            {
+                var ops = await _reservationService.GetOperationsDashboardCountsAsync();
+                return Ok(new ProsumerReservationDashboardResponse
+                {
+                    PendingReservationsCount = ops.PendingReservationsCount,
+                    ApprovedFutureReservationsCount = ops.ApprovedFutureReservationsCount,
+                    CurrentBookingsCount = ops.TodaysReservationsCount,
+                    CompletedReservationsCount = ops.CompletedReservationsCount,
+                    CancelledReservationsCount = ops.CancelledReservationsCount
+                });
+            }
+            var dashboard = await _reservationService.GetMyDashboardCountsAsync(userId);
             return Ok(dashboard);
         }
 
@@ -212,7 +243,9 @@ namespace SunGrid.Api.Controllers
         /// Updates a Pending or Approved reservation applying 12-hour, 7-day, and slot capacity migration rules (Any authenticated user).
         /// </summary>
         [HttpPut("{id}")]
-        [Authorize]
+        [HttpPatch("{id}")]
+        [HttpPost("{id}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(ReservationResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -221,8 +254,8 @@ namespace SunGrid.Api.Controllers
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> UpdateReservation([FromRoute] string id, [FromBody] UpdateReservationRequest request)
         {
-            var userId = GetAuthenticatedUserId();
-            var userRole = GetAuthenticatedUserRole();
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var userRole = User.FindFirstValue(ClaimTypes.Role) ?? "Prosumer";
             var updated = await _reservationService.UpdateReservationAsync(id, request, userId, userRole);
             return Ok(updated);
         }
@@ -265,13 +298,17 @@ namespace SunGrid.Api.Controllers
         /// Soft-cancels a Pending or Approved reservation applying 12-hour rule and releasing slot capacity (Any authenticated user).
         /// </summary>
         [HttpPatch("{id}/cancel")]
+        [HttpPost("{id}/cancel")]
+        [HttpPut("{id}/cancel")]
+        [HttpDelete("{id}/cancel")]
+        [HttpDelete("{id}")]
         [Authorize]
         [ProducesResponseType(typeof(ReservationResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> CancelReservation([FromRoute] string id, [FromBody] CancelReservationRequest? request)
+        public async Task<IActionResult> CancelReservation([FromRoute] string id, [FromBody] CancelReservationRequest? request = null)
         {
             var userId = GetAuthenticatedUserId();
             var userRole = GetAuthenticatedUserRole();

@@ -59,6 +59,7 @@ namespace SunGrid.Api.Models
 
         public double? ActualEnergyAmountKwh { get; set; }
 
+        [BsonIgnoreIfNull]
         public string? QrTokenHash { get; set; }
 
         [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]

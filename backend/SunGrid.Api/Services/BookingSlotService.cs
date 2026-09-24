@@ -118,7 +118,7 @@ namespace SunGrid.Api.Services
             var filter = builder.Eq(s => s.StationId, resolvedStationId);
 
             // Role-based visibility enforcement
-            if (userRole.Equals(UserRole.Prosumer.ToString(), StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(userRole) || userRole.Equals(UserRole.Prosumer.ToString(), StringComparison.OrdinalIgnoreCase))
             {
                 if (station.Status != StationStatus.Active)
                 {

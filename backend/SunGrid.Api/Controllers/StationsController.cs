@@ -66,12 +66,11 @@ namespace SunGrid.Api.Controllers
         }
 
         /// <summary>
-        /// Retrieves all Active stations for web and mobile clients (Any authenticated user).
+        /// Retrieves all Active stations for web and mobile clients.
         /// </summary>
         [HttpGet("active")]
-        [Authorize]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(List<StationResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetActiveStations()
         {
             var stations = await _stationService.GetActiveStationsAsync();
@@ -79,13 +78,12 @@ namespace SunGrid.Api.Controllers
         }
 
         /// <summary>
-        /// Searches Active solar stations within a given radius using Haversine GPS formula (Any authenticated user).
+        /// Searches Active solar stations within a given radius using Haversine GPS formula.
         /// </summary>
         [HttpGet("nearby")]
-        [Authorize]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(List<NearbyStationResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetNearbyStations(
             [FromQuery] double latitude,
             [FromQuery] double longitude,
@@ -96,13 +94,12 @@ namespace SunGrid.Api.Controllers
         }
 
         /// <summary>
-        /// Retrieves a single solar station by ID (Any authenticated user).
+        /// Retrieves a single solar station by ID.
         /// Grid Operators and Prosumers can only access Active stations.
         /// </summary>
         [HttpGet("{id}")]
-        [Authorize]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(StationResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStationById([FromRoute] string id)
         {

@@ -107,6 +107,9 @@ namespace SunGrid.Api.DTOs
         public double Longitude { get; set; }
         public double CapacityKwh { get; set; }
         public int TotalBatteryStorageSlots { get; set; }
+        public int TotalSlots => TotalBatteryStorageSlots;
+        public int AvailableSlots => TotalBatteryStorageSlots;
+        public int Slots => TotalBatteryStorageSlots;
         public List<DayOperatingScheduleDto> OperatingSchedule { get; set; } = new();
         public string Status { get; set; } = string.Empty;
         public string CreatedByUserId { get; set; } = string.Empty;
