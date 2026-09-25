@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj": {}
+    "c:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj": {
+    "c:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj",
+        "projectUniqueName": "c:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj",
         "projectName": "SunGrid.Api",
-        "projectPath": "C:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj",
+        "projectPath": "c:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj",
         "packagesPath": "C:\\Users\\Asus Vivobook\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\obj\\",
+        "outputPath": "c:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Asus Vivobook\\AppData\\Roaming\\NuGet\\NuGet.Config"

@@ -108,8 +108,18 @@ namespace SunGrid.Api.DTOs
         public double CapacityKwh { get; set; }
         public int TotalBatteryStorageSlots { get; set; }
         public int TotalSlots => TotalBatteryStorageSlots;
-        public int AvailableSlots => TotalBatteryStorageSlots;
-        public int Slots => TotalBatteryStorageSlots;
+        public int AvailableSlots { get; set; }
+        public int ReservedSlots { get; set; }
+        public int Slots => AvailableSlots;
+        public double ReceivedEnergyKwh { get; set; }
+        public double DispatchedEnergyKwh { get; set; }
+        public double CurrentStoredEnergyKwh { get; set; }
+        public double PendingIntakeKwh { get; set; }
+        public double AvailableIntakeKwh { get; set; }
+        public double BatteryStoragePercentage => CapacityKwh > 0 ? Math.Round((CurrentStoredEnergyKwh / CapacityKwh) * 100, 1) : 0;
+        public double NetEnergyStoredKwh => Math.Round(ReceivedEnergyKwh - DispatchedEnergyKwh, 2);
+        public bool IsOutOfStorage { get; set; }
+        public bool CanReceiveEnergy => !IsOutOfStorage && AvailableIntakeKwh > 0 && AvailableSlots > 0 && Status == "Active";
         public List<DayOperatingScheduleDto> OperatingSchedule { get; set; } = new();
         public string Status { get; set; } = string.Empty;
         public string CreatedByUserId { get; set; } = string.Empty;

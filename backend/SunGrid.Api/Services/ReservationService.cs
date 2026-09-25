@@ -124,6 +124,44 @@ namespace SunGrid.Api.Services
                     throw new KeyNotFoundException($"Could not resolve an active solar station.");
                 }
 
+                // Substation Out-of-Storage & Capacity Volume guard: DropOff intake rejected if battery full or volume exceeds available headroom
+                if (transferType == EnergyTransferType.EnergyDropOff)
+                {
+                    var totalStationSlots = station.TotalBatteryStorageSlots > 0 ? station.TotalBatteryStorageSlots : 6;
+                    var capacity = station.CapacityKwh > 0 ? station.CapacityKwh : 600.0;
+
+                    var completedForStation = await _context.EnergyReservations
+                        .Find(r => r.StationId == station.Id && r.Status == ReservationStatus.Completed)
+                        .ToListAsync();
+
+                    var completedDropOff = completedForStation.Where(r => r.TransferType == EnergyTransferType.EnergyDropOff).Sum(r => r.EnergyAmountKwh);
+                    var completedCharging = completedForStation.Where(r => r.TransferType == EnergyTransferType.Charging).Sum(r => r.EnergyAmountKwh);
+                    var currentStored = Math.Min(capacity, Math.Max(0, completedDropOff - completedCharging));
+
+                    var pendingDropOffList = await _context.EnergyReservations
+                        .Find(r => r.StationId == station.Id && 
+                            (r.Status == ReservationStatus.Approved || r.Status == ReservationStatus.Pending) &&
+                            r.TransferType == EnergyTransferType.EnergyDropOff)
+                        .ToListAsync();
+
+                    var pendingIntakeKwh = pendingDropOffList.Sum(r => r.EnergyAmountKwh);
+                    var availableIntakeKwh = Math.Max(0, capacity - currentStored - pendingIntakeKwh);
+
+                    var activeOccupyingCount = await _context.EnergyReservations
+                        .CountDocumentsAsync(r => r.StationId == station.Id && 
+                            (r.Status == ReservationStatus.Approved || r.Status == ReservationStatus.Pending));
+
+                    if (activeOccupyingCount >= totalStationSlots || availableIntakeKwh <= 0)
+                    {
+                        throw new InvalidOperationException($"Substation '{station.Name}' is OUT OF STORAGE capacity ({activeOccupyingCount}/{totalStationSlots} bays occupied, {currentStored:F1}/{capacity:F1} kWh stored). It cannot receive energy drop-offs at this time.");
+                    }
+
+                    if (energyAmountKwh > availableIntakeKwh)
+                    {
+                        throw new InvalidOperationException($"Requested drop-off volume of {energyAmountKwh:F1} kWh exceeds the available storage capacity of substation '{station.Name}' ({availableIntakeKwh:F1} kWh available headroom).");
+                    }
+                }
+
                 // Find or create slot matching the requested scheduled time or default
                 var timeInput = !string.IsNullOrWhiteSpace(scheduledTime) ? scheduledTime : slotStartTimeUtc;
                 DateTime slotStart;
@@ -389,6 +427,12 @@ namespace SunGrid.Api.Services
 
             var completedCount = (long)completedReservations.Count;
             var totalEnergyTraded = completedReservations.Sum(r => r.EnergyAmountKwh);
+            var totalEnergySold = completedReservations
+                .Where(r => r.TransferType == EnergyTransferType.EnergyDropOff)
+                .Sum(r => r.EnergyAmountKwh);
+            var totalEnergyBought = completedReservations
+                .Where(r => r.TransferType == EnergyTransferType.Charging)
+                .Sum(r => r.EnergyAmountKwh);
 
             var cancelledCount = await _context.EnergyReservations
                 .CountDocumentsAsync(r => r.ProsumerId == prosumerId && r.Status == ReservationStatus.Cancelled);
@@ -415,7 +459,9 @@ namespace SunGrid.Api.Services
                 CurrentBookingsCount = pendingCount + approvedFutureCount,
                 CompletedReservationsCount = completedCount,
                 CancelledReservationsCount = cancelledCount,
-                TotalEnergyTraded = totalEnergyTraded
+                TotalEnergyTraded = Math.Round(totalEnergyTraded, 2),
+                TotalEnergySoldKwh = Math.Round(totalEnergySold, 2),
+                TotalEnergyBoughtKwh = Math.Round(totalEnergyBought, 2)
             };
         }
 

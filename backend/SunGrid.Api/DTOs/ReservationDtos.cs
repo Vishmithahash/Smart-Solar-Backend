@@ -161,6 +161,9 @@ namespace SunGrid.Api.DTOs
         public double TotalEnergyTraded { get; set; }
         public double TotalEnergyTradedKwh => TotalEnergyTraded;
         public double TotalEnergyKwhTraded => TotalEnergyTraded;
+        public double TotalEnergySoldKwh { get; set; }
+        public double TotalEnergyBoughtKwh { get; set; }
+        public double NetEnergyKwh => Math.Round(TotalEnergySoldKwh - TotalEnergyBoughtKwh, 2);
     }
 
     /// <summary>

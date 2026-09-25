@@ -66,7 +66,9 @@ namespace SunGrid.Api.Services
             };
 
             await _context.SolarStationInfo.InsertOneAsync(station);
-            return MapToStationResponse(station);
+            var response = MapToStationResponse(station);
+            await EnrichStationMetricsAsync(response);
+            return response;
         }
 
         /// <summary>
@@ -112,9 +114,15 @@ namespace SunGrid.Api.Services
                 .Limit(pageSize)
                 .ToListAsync();
 
+            var items = stations.Select(MapToStationResponse).ToList();
+            foreach (var item in items)
+            {
+                await EnrichStationMetricsAsync(item);
+            }
+
             return new StationListResponse
             {
-                Items = stations.Select(MapToStationResponse).ToList(),
+                Items = items,
                 TotalCount = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -128,7 +136,12 @@ namespace SunGrid.Api.Services
         {
             var filter = Builders<SolarStation>.Filter.Eq(s => s.Status, StationStatus.Active);
             var stations = await _context.SolarStationInfo.Find(filter).ToListAsync();
-            return stations.Select(MapToStationResponse).ToList();
+            var items = stations.Select(MapToStationResponse).ToList();
+            foreach (var item in items)
+            {
+                await EnrichStationMetricsAsync(item);
+            }
+            return items;
         }
 
         /// <summary>
@@ -159,6 +172,7 @@ namespace SunGrid.Api.Services
                 if (distance <= radiusKm)
                 {
                     var nearbyResponse = MapToNearbyStationResponse(station, distance);
+                    await EnrichStationMetricsAsync(nearbyResponse);
                     nearbyList.Add(nearbyResponse);
                 }
             }
@@ -192,7 +206,9 @@ namespace SunGrid.Api.Services
                 throw new KeyNotFoundException($"Solar station with ID '{id}' was not found.");
             }
 
-            return MapToStationResponse(station);
+            var response = MapToStationResponse(station);
+            await EnrichStationMetricsAsync(response);
+            return response;
         }
 
         /// <summary>
@@ -221,7 +237,9 @@ namespace SunGrid.Api.Services
                 throw new KeyNotFoundException($"Solar station with ID '{id}' was not found.");
             }
 
-            return MapToStationResponse(updatedStation);
+            var response = MapToStationResponse(updatedStation);
+            await EnrichStationMetricsAsync(response);
+            return response;
         }
 
         /// <summary>
@@ -248,7 +266,9 @@ namespace SunGrid.Api.Services
                 throw new KeyNotFoundException($"Solar station with ID '{id}' was not found.");
             }
 
-            return MapToStationResponse(updatedStation);
+            var response = MapToStationResponse(updatedStation);
+            await EnrichStationMetricsAsync(response);
+            return response;
         }
 
         /// <summary>
@@ -287,7 +307,9 @@ namespace SunGrid.Api.Services
             var options = new FindOneAndUpdateOptions<SolarStation> { ReturnDocument = ReturnDocument.After };
             var updatedStation = await _context.SolarStationInfo.FindOneAndUpdateAsync(filter, update, options);
 
-            return MapToStationResponse(updatedStation!);
+            var response = MapToStationResponse(updatedStation!);
+            await EnrichStationMetricsAsync(response);
+            return response;
         }
 
         /// <summary>
@@ -319,7 +341,9 @@ namespace SunGrid.Api.Services
             var options = new FindOneAndUpdateOptions<SolarStation> { ReturnDocument = ReturnDocument.After };
             var updatedStation = await _context.SolarStationInfo.FindOneAndUpdateAsync(filter, update, options);
 
-            return MapToStationResponse(updatedStation!);
+            var response = MapToStationResponse(updatedStation!);
+            await EnrichStationMetricsAsync(response);
+            return response;
         }
 
         /// <summary>
@@ -425,6 +449,65 @@ namespace SunGrid.Api.Services
                 ClosingTime = m.ClosingTime,
                 IsClosed = m.IsClosed
             }).ToList();
+        }
+
+        /// <summary>
+        /// Computes live received/dispatched energy telemetry and slot storage occupancy for a station.
+        /// </summary>
+        private async Task EnrichStationMetricsAsync(StationResponse response)
+        {
+            if (string.IsNullOrWhiteSpace(response.Id)) return;
+
+            var totalSlots = response.TotalBatteryStorageSlots > 0 ? response.TotalBatteryStorageSlots : 6;
+
+            var completedForStation = await _context.EnergyReservations
+                .Find(r => r.StationId == response.Id && r.Status == ReservationStatus.Completed)
+                .ToListAsync();
+
+            var receivedKwh = completedForStation
+                .Where(r => r.TransferType == EnergyTransferType.EnergyDropOff)
+                .Sum(r => r.EnergyAmountKwh);
+
+            var dispatchedKwh = completedForStation
+                .Where(r => r.TransferType == EnergyTransferType.Charging)
+                .Sum(r => r.EnergyAmountKwh);
+
+            var capacity = response.CapacityKwh > 0 ? response.CapacityKwh : 600.0;
+
+            // Physical State of Charge calculation:
+            // Net stored energy cannot exceed total physical battery capacity, nor fall below 0
+            var netStored = Math.Max(0, receivedKwh - dispatchedKwh);
+            var currentStored = Math.Min(capacity, netStored);
+
+            // Active / pending intake reservations awaiting drop-off
+            var pendingDropOffList = await _context.EnergyReservations
+                .Find(r => r.StationId == response.Id && 
+                    (r.Status == ReservationStatus.Approved || r.Status == ReservationStatus.Pending) &&
+                    r.TransferType == EnergyTransferType.EnergyDropOff)
+                .ToListAsync();
+
+            var pendingIntakeKwh = pendingDropOffList.Sum(r => r.EnergyAmountKwh);
+            var availableIntakeKwh = Math.Max(0, capacity - currentStored - pendingIntakeKwh);
+
+            var activeOccupyingCount = await _context.EnergyReservations
+                .CountDocumentsAsync(r => r.StationId == response.Id && 
+                    (r.Status == ReservationStatus.Approved || r.Status == ReservationStatus.Pending));
+
+            int reservedSlots = (int)Math.Min(totalSlots, activeOccupyingCount);
+            int availableSlots = Math.Max(0, totalSlots - reservedSlots);
+
+            // Out of storage if either: no available bays left OR available intake kWh <= 0
+            bool isOutOfStorage = availableSlots <= 0 || availableIntakeKwh <= 0;
+
+            response.TotalBatteryStorageSlots = totalSlots;
+            response.AvailableSlots = isOutOfStorage ? 0 : availableSlots;
+            response.ReservedSlots = isOutOfStorage ? totalSlots : reservedSlots;
+            response.ReceivedEnergyKwh = Math.Round(receivedKwh, 2);
+            response.DispatchedEnergyKwh = Math.Round(dispatchedKwh, 2);
+            response.CurrentStoredEnergyKwh = Math.Round(currentStored, 2);
+            response.PendingIntakeKwh = Math.Round(pendingIntakeKwh, 2);
+            response.AvailableIntakeKwh = Math.Round(availableIntakeKwh, 2);
+            response.IsOutOfStorage = isOutOfStorage;
         }
 
         /// <summary>
