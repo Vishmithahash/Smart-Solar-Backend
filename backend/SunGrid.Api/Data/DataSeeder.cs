@@ -128,29 +128,16 @@ namespace SunGrid.Api.Data
                 IsClosed = day == DayOfWeek.Sunday
             }).ToList();
 
+            // 4. Clean up legacy Colombo station and slots to maintain exact 2 active stations in the database
             var colomboStation = await _context.SolarStationInfo.Find(s => s.StationCode == "ST-COL-001").FirstOrDefaultAsync();
-            if (colomboStation == null)
+            if (colomboStation != null)
             {
-                colomboStation = new SolarStation
-                {
-                    StationCode = "ST-COL-001",
-                    Name = "Colombo Central Solar Hub",
-                    Address = "Galle Face Green Microgrid Hub, Colombo 03",
-                    Latitude = 6.9271,
-                    Longitude = 79.8612,
-                    CapacityKwh = 500.0,
-                    TotalBatteryStorageSlots = 10,
-                    OperatingSchedule = defaultOperatingSchedule,
-                    Status = StationStatus.Active,
-                    CreatedByUserId = adminUser.Id,
-                    UpdatedByUserId = adminUser.Id,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                await _context.SolarStationInfo.InsertOneAsync(colomboStation);
-                _logger.LogInformation("Successfully created Solar Station: ST-COL-001");
+                await _context.EnergyBookingSlots.DeleteManyAsync(s => s.StationId == colomboStation.Id);
+                await _context.SolarStationInfo.DeleteOneAsync(s => s.Id == colomboStation.Id);
+                _logger.LogInformation("Removed legacy Colombo station (ST-COL-001) and associated slots to match database fleet.");
             }
 
+            // Ensure Kandy station exists
             var kandyStation = await _context.SolarStationInfo.Find(s => s.StationCode == "ST-KND-002").FirstOrDefaultAsync();
             if (kandyStation == null)
             {
@@ -172,60 +159,6 @@ namespace SunGrid.Api.Data
                 };
                 await _context.SolarStationInfo.InsertOneAsync(kandyStation);
                 _logger.LogInformation("Successfully created Solar Station: ST-KND-002");
-            }
-
-            // 5. Seed Energy Booking Slots for Colombo Station
-            var tomorrowBase = DateTime.UtcNow.Date.AddDays(1);
-            var slot1Start = tomorrowBase.AddHours(9);  // 09:00 UTC tomorrow
-            var slot1End = tomorrowBase.AddHours(11);   // 11:00 UTC tomorrow
-
-            var slot1 = await _context.EnergyBookingSlots
-                .Find(s => s.StationId == colomboStation.Id && s.StartTimeUtc == slot1Start)
-                .FirstOrDefaultAsync();
-
-            if (slot1 == null)
-            {
-                slot1 = new EnergyBookingSlot
-                {
-                    StationId = colomboStation.Id,
-                    StartTimeUtc = slot1Start,
-                    EndTimeUtc = slot1End,
-                    TotalCapacity = 5,
-                    AvailableCapacity = 5,
-                    Status = BookingSlotStatus.Available,
-                    CreatedByUserId = operatorUser.Id,
-                    UpdatedByUserId = operatorUser.Id,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                await _context.EnergyBookingSlots.InsertOneAsync(slot1);
-                _logger.LogInformation("Successfully created Booking Slot 1 for station {StationCode}", colomboStation.StationCode);
-            }
-
-            var slot2Start = tomorrowBase.AddHours(14); // 14:00 UTC tomorrow
-            var slot2End = tomorrowBase.AddHours(16);   // 16:00 UTC tomorrow
-
-            var slot2 = await _context.EnergyBookingSlots
-                .Find(s => s.StationId == colomboStation.Id && s.StartTimeUtc == slot2Start)
-                .FirstOrDefaultAsync();
-
-            if (slot2 == null)
-            {
-                slot2 = new EnergyBookingSlot
-                {
-                    StationId = colomboStation.Id,
-                    StartTimeUtc = slot2Start,
-                    EndTimeUtc = slot2End,
-                    TotalCapacity = 5,
-                    AvailableCapacity = 5,
-                    Status = BookingSlotStatus.Available,
-                    CreatedByUserId = operatorUser.Id,
-                    UpdatedByUserId = operatorUser.Id,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                await _context.EnergyBookingSlots.InsertOneAsync(slot2);
-                _logger.LogInformation("Successfully created Booking Slot 2 for station {StationCode}", colomboStation.StationCode);
             }
         }
     }

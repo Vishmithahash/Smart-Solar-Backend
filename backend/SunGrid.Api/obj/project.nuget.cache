@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "I2p2p3L9TCo=",
+  "dgSpecHash": "A3ehxsgx0sU=",
   "success": true,
-  "projectFilePath": "c:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj",
+  "projectFilePath": "C:\\Users\\Asus Vivobook\\Desktop\\Y4S1\\EAD_SOLAR_SYSTEM\\Smart-Solar-Backend\\backend\\SunGrid.Api\\SunGrid.Api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Asus Vivobook\\.nuget\\packages\\bcrypt.net-next\\4.2.0\\bcrypt.net-next.4.2.0.nupkg.sha512",
     "C:\\Users\\Asus Vivobook\\.nuget\\packages\\dnsclient\\1.6.1\\dnsclient.1.6.1.nupkg.sha512",
