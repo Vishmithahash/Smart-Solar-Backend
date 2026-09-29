@@ -95,18 +95,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("SunGridCorsPolicy", policy =>
     {
-        if (corsOrigins.Length > 0)
-        {
-            policy.WithOrigins(corsOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
-        }
-        else
-        {
-            policy.AllowAnyHeader()
-                  .AllowAnyMethod();
-        }
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -167,22 +159,20 @@ using (var scope = app.Services.CreateScope())
 // Global Exception Handler Middleware
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-// Enable Swagger UI in Development OR when explicitly enabled via Swagger:Enabled=true
-var enableSwagger = app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled", false);
-if (enableSwagger)
+// Enable Swagger UI
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SunGrid API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SunGrid API v1");
+    c.RoutePrefix = "swagger";
+});
 
 app.UseCors("SunGridCorsPolicy");
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapGet("/", () => Results.Ok(new { message = "SunGrid API is running!", status = "Healthy" }));
 
 app.MapControllers();
 
